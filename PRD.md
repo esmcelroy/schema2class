@@ -35,6 +35,17 @@ Developers who need to consume XSD or JSON Schema contracts in Kotlin projects a
 6. Ship a CLI for one-off / scripted use
 7. Open-source under Apache 2.0
 
+## Version Targets
+
+| | Version | Rationale |
+|---|---|---|
+| **Kotlin** | 1.9.x | Stable, widely deployed; K2/2.x migration is a tracked future upgrade |
+| **JVM toolchain** | 21 | Compile with modern JDK for fast builds and toolchain access |
+| **JVM bytecode target** | 17 | Consumers on Java 17 LTS can use the library without upgrading |
+| **Gradle** | 8.x | Required for Configuration Cache and modern plugin APIs |
+
+The gap between toolchain (21) and target (17) costs nothing: consumers get a library that runs on JVM 17+, and we compile it with JDK 21 to get faster incremental builds and modern toolchain resolution. A tracked issue exists for migrating to Kotlin 2.x once it is the clear ecosystem default.
+
 ## Non-Goals (v1)
 
 - Generating Kotlin from OpenAPI/Swagger (future scope, schema layer would be reusable)
@@ -42,6 +53,7 @@ Developers who need to consume XSD or JSON Schema contracts in Kotlin projects a
 - Generating code in languages other than Kotlin
 - XSD 2.0
 - Full JSON Schema vocabularies beyond the core (hyper-schema, etc.)
+- Kotlin 2.x / K2 compiler (tracked for future upgrade)
 
 ---
 
