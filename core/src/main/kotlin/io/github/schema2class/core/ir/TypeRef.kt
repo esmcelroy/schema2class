@@ -42,6 +42,12 @@ enum class PrimitiveType(val kotlinType: String) {
     DATE("java.time.LocalDate"),
     DATE_TIME("java.time.OffsetDateTime"),
     DURATION("java.time.Duration"),
+    /** xs:float. Distinct from DOUBLE because XSD has separate float/double types. */
+    FLOAT("Float"),
+    /** xs:base64Binary, xs:hexBinary, and binary attachment fields. */
+    BYTES("ByteArray"),
+    /** xs:anyURI and JSON Schema format:uri. Mapped to String to avoid URI constructor throws. */
+    URI("String"),
     /** Escape hatch for xs:any and JSON Schema schemas with no type constraint. */
     ANY("Any"),
 }

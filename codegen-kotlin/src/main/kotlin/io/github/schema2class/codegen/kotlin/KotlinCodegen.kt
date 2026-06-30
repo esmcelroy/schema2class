@@ -63,7 +63,9 @@ class KotlinCodegen {
             typeBuilder.superclass(superType.toKotlinTypeName(packageName))
         }
 
-        for (prop in type.properties) {
+        val allProps = listOfNotNull(type.contentProperty) + type.properties
+
+        for (prop in allProps) {
             val typeName = prop.type.toKotlinTypeName(packageName)
             val resolvedTypeName = if (prop.nullable) typeName.copy(nullable = true) else typeName
 
@@ -180,12 +182,15 @@ class KotlinCodegen {
         PrimitiveType.STRING -> String::class.asClassName()
         PrimitiveType.INT -> Int::class.asClassName()
         PrimitiveType.LONG -> Long::class.asClassName()
+        PrimitiveType.FLOAT -> Float::class.asClassName()
         PrimitiveType.DOUBLE -> Double::class.asClassName()
         PrimitiveType.BOOLEAN -> Boolean::class.asClassName()
         PrimitiveType.DECIMAL -> ClassName("java.math", "BigDecimal")
         PrimitiveType.DATE -> ClassName("java.time", "LocalDate")
         PrimitiveType.DATE_TIME -> ClassName("java.time", "OffsetDateTime")
         PrimitiveType.DURATION -> ClassName("java.time", "Duration")
+        PrimitiveType.BYTES -> ByteArray::class.asClassName()
+        PrimitiveType.URI -> String::class.asClassName()
         PrimitiveType.ANY -> Any::class.asClassName()
     }
 }

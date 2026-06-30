@@ -113,4 +113,45 @@ class SchemaModelTest {
         ref.name shouldBe "CoreComponentType"
         ref.packageName shouldBe "io.github.schema2class.uncefact.data"
     }
+
+    // Mirrors UNECE AmountType: xs:simpleContent + xs:extension → typed body value + attributes.
+    @Test
+    fun `ComplexType with contentProperty round-trips through IR`() {
+        val contentProp = PropertyDefinition(
+            schemaName = "value",
+            kotlinName = "value",
+            type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+            nullable = false,
+            defaultValue = null,
+            documentation = null,
+        )
+        val type = TypeDefinition.ComplexType(
+            schemaName = "AmountType",
+            kotlinName = "AmountType",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currencyID",
+                    kotlinName = "currencyID",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+            contentProperty = contentProp,
+        )
+
+        type.contentProperty shouldBe contentProp
+        type.properties shouldHaveSize 1
+        type.properties[0].schemaName shouldBe "currencyID"
+    }
+
+    // Verifies new PrimitiveType values (BYTES, URI, FLOAT) are accessible.
+    @Test
+    fun `new PrimitiveType values have correct kotlinType strings`() {
+        PrimitiveType.BYTES.kotlinType shouldBe "ByteArray"
+        PrimitiveType.URI.kotlinType shouldBe "String"
+        PrimitiveType.FLOAT.kotlinType shouldBe "Float"
+    }
 }

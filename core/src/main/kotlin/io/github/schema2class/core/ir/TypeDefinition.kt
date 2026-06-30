@@ -13,6 +13,9 @@ sealed class TypeDefinition {
     /**
      * A structured type with named properties. Maps to a Kotlin data class.
      * [superType] is non-null when the type extends another (xs:extension).
+     * [contentProperty] is non-null for xs:simpleContent types (complexType with a text body
+     * plus attributes). Codegen emits it as the first constructor parameter, conventionally
+     * named "value", before the attribute properties.
      */
     data class ComplexType(
         override val schemaName: String,
@@ -20,6 +23,7 @@ sealed class TypeDefinition {
         override val documentation: String?,
         val properties: List<PropertyDefinition>,
         val superType: TypeRef? = null,
+        val contentProperty: PropertyDefinition? = null,
     ) : TypeDefinition()
 
     /**

@@ -286,6 +286,113 @@ class KotlinCodegenTest {
     }
 
     // -----------------------------------------------------------------------
+    // 8. ComplexType with contentProperty → first constructor param
+    // -----------------------------------------------------------------------
+    @Test
+    fun `ComplexType with contentProperty emits it as first constructor parameter`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "AmountType",
+            kotlinName = "AmountType",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currencyID",
+                    kotlinName = "currencyID",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+            contentProperty = PropertyDefinition(
+                schemaName = "value",
+                kotlinName = "value",
+                type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+                nullable = false,
+                defaultValue = null,
+                documentation = null,
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "AmountType")
+
+        source shouldContain "data class AmountType("
+        // KotlinPoet backtick-escapes `value` because it is a soft keyword in Kotlin 1.9
+        source shouldContain "BigDecimal"
+        source shouldContain "val currencyID: String? = null"
+        val valueIdx = source.indexOf("BigDecimal")
+        val currencyIdx = source.indexOf("currencyID")
+        assert(valueIdx < currencyIdx) { "contentProperty should precede regular properties in constructor" }
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. New PrimitiveType values: FLOAT, BYTES, URI
+    // -----------------------------------------------------------------------
+    @Test
+    fun `FLOAT primitive emits Float`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Measurement",
+            kotlinName = "Measurement",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "width",
+                    kotlinName = "width",
+                    type = TypeRef.Primitive(PrimitiveType.FLOAT),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val source = sourceFor(generate(type), "Measurement")
+        source shouldContain "val width: Float"
+    }
+
+    @Test
+    fun `BYTES primitive emits ByteArray`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Attachment",
+            kotlinName = "Attachment",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "payload",
+                    kotlinName = "payload",
+                    type = TypeRef.Primitive(PrimitiveType.BYTES),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val source = sourceFor(generate(type), "Attachment")
+        source shouldContain "val payload: ByteArray"
+    }
+
+    @Test
+    fun `URI primitive emits String`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Link",
+            kotlinName = "Link",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "href",
+                    kotlinName = "href",
+                    type = TypeRef.Primitive(PrimitiveType.URI),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val source = sourceFor(generate(type), "Link")
+        source shouldContain "val href: String"
+    }
+
+    // -----------------------------------------------------------------------
     // Additional: file path is correctly derived from package and type name
     // -----------------------------------------------------------------------
     @Test
