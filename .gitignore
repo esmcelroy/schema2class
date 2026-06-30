@@ -13,3 +13,6 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# sample data
+samples/
