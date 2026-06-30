@@ -1,0 +1,305 @@
+package io.github.schema2class.codegen.kotlin
+
+import io.github.schema2class.core.ir.EnumValue
+import io.github.schema2class.core.ir.PrimitiveType
+import io.github.schema2class.core.ir.PropertyDefinition
+import io.github.schema2class.core.ir.SchemaModel
+import io.github.schema2class.core.ir.SourceFormat
+import io.github.schema2class.core.ir.TypeDefinition
+import io.github.schema2class.core.ir.TypeRef
+import io.github.schema2class.core.ir.UnionVariant
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import org.junit.jupiter.api.Test
+
+class KotlinCodegenTest {
+
+    private val pkg = "io.github.example"
+    private val codegen = KotlinCodegen()
+
+    private fun model(vararg types: TypeDefinition) = SchemaModel(
+        namespace = null,
+        packageName = pkg,
+        types = types.toList(),
+        sourceFormat = SourceFormat.JSON_SCHEMA,
+    )
+
+    private fun generate(vararg types: TypeDefinition): Map<String, String> =
+        codegen.generate(model(*types))
+
+    private fun sourceFor(types: Map<String, String>, name: String): String {
+        val key = types.keys.first { it.endsWith("/$name.kt") }
+        return types.getValue(key)
+    }
+
+    // -----------------------------------------------------------------------
+    // 1. ComplexType with required and optional properties
+    // -----------------------------------------------------------------------
+    @Test
+    fun `ComplexType generates data class with nullability and default null`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Address",
+            kotlinName = "Address",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "street",
+                    kotlinName = "street",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "city",
+                    kotlinName = "city",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "country",
+                    kotlinName = "country",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "Address")
+
+        source shouldContain "data class Address("
+        source shouldContain "val street: String"
+        source shouldContain "val city: String"
+        source shouldContain "val country: String? = null"
+        // non-nullable fields have no default
+        source shouldNotContain "val street: String? ="
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. ComplexType with a List<T> property
+    // -----------------------------------------------------------------------
+    @Test
+    fun `ComplexType with List property generates correct type`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Order",
+            kotlinName = "Order",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "items",
+                    kotlinName = "items",
+                    type = TypeRef.ListOf(TypeRef.Named("Item")),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "Order")
+
+        source shouldContain "data class Order("
+        source shouldContain "List<Item>"
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. EnumType → enum class; when serialized value differs, comment present
+    // -----------------------------------------------------------------------
+    @Test
+    fun `EnumType generates enum class with constant names`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "Status",
+            kotlinName = "Status",
+            documentation = null,
+            values = listOf(
+                EnumValue(serializedValue = "ACTIVE", kotlinName = "ACTIVE", documentation = null),
+                EnumValue(serializedValue = "INACTIVE", kotlinName = "INACTIVE", documentation = null),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "Status")
+
+        source shouldContain "enum class Status"
+        source shouldContain "ACTIVE"
+        source shouldContain "INACTIVE"
+        // No comments needed when serialized == kotlinName
+        source shouldNotContain "// \"ACTIVE\""
+    }
+
+    @Test
+    fun `EnumType with differing serialized values emits inline comments`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "ActionCode",
+            kotlinName = "ActionCode",
+            documentation = null,
+            values = listOf(
+                EnumValue(serializedValue = "1", kotlinName = "ADDED", documentation = null),
+                EnumValue(serializedValue = "2", kotlinName = "DELETED", documentation = null),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "ActionCode")
+
+        source shouldContain "enum class ActionCode"
+        source shouldContain "ADDED"
+        source shouldContain "DELETED"
+        source shouldContain "// \"1\""
+        source shouldContain "// \"2\""
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. UnionType → sealed class with inner data class subtypes
+    // -----------------------------------------------------------------------
+    @Test
+    fun `UnionType generates sealed class with inner data class variants`() {
+        val type = TypeDefinition.UnionType(
+            schemaName = "CancelInProgress",
+            kotlinName = "CancelInProgress",
+            documentation = null,
+            variants = listOf(
+                UnionVariant(
+                    kotlinName = "BooleanVariant",
+                    type = TypeRef.Primitive(PrimitiveType.BOOLEAN),
+                ),
+                UnionVariant(
+                    kotlinName = "StringVariant",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                ),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "CancelInProgress")
+
+        source shouldContain "sealed class CancelInProgress"
+        source shouldContain "data class BooleanVariant"
+        // KotlinPoet escapes `value` because it is a contextual keyword in Kotlin 1.9
+        source shouldContain "Boolean"
+        source shouldContain "data class StringVariant"
+        source shouldContain "String"
+        source shouldContain ": CancelInProgress()"
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. AliasType → typealias
+    // -----------------------------------------------------------------------
+    @Test
+    fun `AliasType generates typealias`() {
+        val type = TypeDefinition.AliasType(
+            schemaName = "EmailAddress",
+            kotlinName = "EmailAddress",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "EmailAddress")
+
+        source shouldContain "typealias EmailAddress = String"
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. TypeRef.Primitive(DECIMAL) → java.math.BigDecimal
+    // -----------------------------------------------------------------------
+    @Test
+    fun `DECIMAL primitive emits java_math_BigDecimal`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Price",
+            kotlinName = "Price",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "amount",
+                    kotlinName = "amount",
+                    type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "Price")
+
+        source shouldContain "BigDecimal"
+        // KotlinPoet may add an import or use the fully-qualified name
+        val hasFqn = source.contains("java.math.BigDecimal")
+        val hasImport = source.contains("import java.math.BigDecimal")
+        assert(hasFqn || hasImport) {
+            "Expected source to reference java.math.BigDecimal fully-qualified or via import, got:\n$source"
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. KDoc from documentation field appears in generated output
+    // -----------------------------------------------------------------------
+    @Test
+    fun `documentation field emits KDoc comment`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Person",
+            kotlinName = "Person",
+            documentation = "Represents a person entity.",
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "name",
+                    kotlinName = "name",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "Person")
+
+        source shouldContain "Represents a person entity."
+        // KDoc should be formatted as /** ... */
+        source shouldContain "/**"
+    }
+
+    @Test
+    fun `documentation on AliasType emits KDoc comment`() {
+        val type = TypeDefinition.AliasType(
+            schemaName = "EmailAddress",
+            kotlinName = "EmailAddress",
+            documentation = "A valid email address string.",
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+        )
+
+        val sources = generate(type)
+        val source = sourceFor(sources, "EmailAddress")
+
+        source shouldContain "typealias EmailAddress = String"
+        source shouldContain "A valid email address string."
+        source shouldContain "/**"
+    }
+
+    // -----------------------------------------------------------------------
+    // Additional: file path is correctly derived from package and type name
+    // -----------------------------------------------------------------------
+    @Test
+    fun `file path mirrors package and type name`() {
+        val type = TypeDefinition.AliasType(
+            schemaName = "Foo",
+            kotlinName = "Foo",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.INT),
+        )
+
+        val sources = generate(type)
+        assert(sources.containsKey("io/github/example/Foo.kt")) {
+            "Expected key 'io/github/example/Foo.kt' but got keys: ${sources.keys}"
+        }
+    }
+}
