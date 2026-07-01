@@ -1,0 +1,364 @@
+package io.github.schema2class.parser.xsd
+
+import io.github.schema2class.core.ir.Constraint
+import io.github.schema2class.core.ir.PrimitiveType
+import io.github.schema2class.core.ir.SourceFormat
+import io.github.schema2class.core.ir.TypeDefinition
+import io.github.schema2class.core.ir.TypeRef
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
+import org.junit.jupiter.api.Test
+
+class XsdParserTest {
+
+    private val parser = XsdParser()
+
+    private fun parse(xml: String) =
+        parser.parse(xml.trimIndent().byteInputStream(), "com.example")
+
+    // ── Test 1: source format ─────────────────────────────────────────────────
+
+    @Test
+    fun `source format is XSD`() {
+        val model = parse("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>""")
+        model.sourceFormat shouldBe SourceFormat.XSD
+    }
+
+    // ── Test 2: targetNamespace ───────────────────────────────────────────────
+
+    @Test
+    fun `targetNamespace becomes model namespace`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                       targetNamespace="urn:example:foo"/>
+            """
+        )
+        model.namespace shouldBe "urn:example:foo"
+    }
+
+    // ── Test 3: simpleType with string enum ───────────────────────────────────
+
+    @Test
+    fun `simpleType with enumeration produces EnumType with SCREAMING_SNAKE_CASE constants`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="Color">
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="red"/>
+                  <xs:enumeration value="green-blue"/>
+                  <xs:enumeration value="YELLOW"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+        val enum = model.types.filterIsInstance<TypeDefinition.EnumType>()
+            .find { it.schemaName == "Color" }.shouldNotBeNull()
+        enum.values.map { it.serializedValue } shouldBe listOf("red", "green-blue", "YELLOW")
+        enum.values.map { it.kotlinName } shouldBe listOf("RED", "GREEN_BLUE", "YELLOW")
+    }
+
+    // ── Test 4: enum with ccts:Name annotation (UNECE pattern) ───────────────
+
+    @Test
+    fun `enum with ccts Name annotation uses name for kotlin constant`() {
+        val model = parse(
+            """
+            <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                        xmlns:ccts="urn:un:unece:uncefact:documentation:standard:CoreComponentsTechnicalSpecification:2">
+              <xsd:simpleType name="ActionCodeContentType">
+                <xsd:restriction base="xsd:token">
+                  <xsd:enumeration value="1">
+                    <xsd:annotation>
+                      <xsd:documentation xml:lang="en">
+                        <ccts:Name>Added</ccts:Name>
+                        <ccts:Description>The information was added.</ccts:Description>
+                      </xsd:documentation>
+                    </xsd:annotation>
+                  </xsd:enumeration>
+                  <xsd:enumeration value="2">
+                    <xsd:annotation>
+                      <xsd:documentation xml:lang="en">
+                        <ccts:Name>Deleted</ccts:Name>
+                      </xsd:documentation>
+                    </xsd:annotation>
+                  </xsd:enumeration>
+                </xsd:restriction>
+              </xsd:simpleType>
+            </xsd:schema>
+            """
+        )
+        val enum = model.types.filterIsInstance<TypeDefinition.EnumType>()
+            .find { it.schemaName == "ActionCodeContentType" }.shouldNotBeNull()
+        enum.values.map { it.serializedValue } shouldBe listOf("1", "2")
+        enum.values.map { it.kotlinName } shouldBe listOf("ADDED", "DELETED")
+        enum.values[0].documentation shouldBe "The information was added."
+    }
+
+    // ── Test 5: complexType with sequence → ComplexType ───────────────────────
+
+    @Test
+    fun `complexType with sequence produces ComplexType`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Address">
+                <xs:sequence>
+                  <xs:element name="street" type="xs:string"/>
+                  <xs:element name="postCode" type="xs:string" minOccurs="0"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Address" }.shouldNotBeNull()
+
+        val street = type.properties.find { it.schemaName == "street" }.shouldNotBeNull()
+        street.type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        street.nullable shouldBe false
+
+        val postCode = type.properties.find { it.schemaName == "postCode" }.shouldNotBeNull()
+        postCode.nullable shouldBe true
+    }
+
+    // ── Test 6: maxOccurs="unbounded" → ListOf ────────────────────────────────
+
+    @Test
+    fun `element with maxOccurs unbounded produces ListOf property`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Order">
+                <xs:sequence>
+                  <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Order" }.shouldNotBeNull()
+        val itemProp = type.properties.find { it.schemaName == "item" }.shouldNotBeNull()
+        itemProp.type shouldBe TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.STRING))
+        itemProp.nullable shouldBe false
+    }
+
+    // ── Test 7: xs:attribute use=required vs optional ─────────────────────────
+
+    @Test
+    fun `attribute with use=required is non-nullable, optional is nullable`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Tagged">
+                <xs:attribute name="id" type="xs:string" use="required"/>
+                <xs:attribute name="lang" type="xs:string" use="optional"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Tagged" }.shouldNotBeNull()
+        type.properties.find { it.schemaName == "id" }.shouldNotBeNull().nullable shouldBe false
+        type.properties.find { it.schemaName == "lang" }.shouldNotBeNull().nullable shouldBe true
+    }
+
+    // ── Test 8: xs:simpleContent + xs:extension → contentProperty ─────────────
+
+    @Test
+    fun `simpleContent extension produces ComplexType with contentProperty`() {
+        val model = parse(
+            """
+            <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+              <xsd:complexType name="AmountType">
+                <xsd:simpleContent>
+                  <xsd:extension base="xsd:decimal">
+                    <xsd:attribute name="currencyID" type="xsd:token" use="optional"/>
+                  </xsd:extension>
+                </xsd:simpleContent>
+              </xsd:complexType>
+            </xsd:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "AmountType" }.shouldNotBeNull()
+
+        val content = type.contentProperty.shouldNotBeNull()
+        content.type shouldBe TypeRef.Primitive(PrimitiveType.DECIMAL)
+        content.nullable shouldBe false
+
+        type.properties.find { it.schemaName == "currencyID" }.shouldNotBeNull().nullable shouldBe true
+    }
+
+    // ── Test 9: simpleType restriction without enum → AliasType ──────────────
+
+    @Test
+    fun `simpleType restriction without enum produces AliasType with constraints`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="ShortString">
+                <xs:restriction base="xs:string">
+                  <xs:minLength value="1"/>
+                  <xs:maxLength value="100"/>
+                  <xs:pattern value="[a-z]+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+        val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "ShortString" }.shouldNotBeNull()
+        alias.aliasedType shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        alias.constraints shouldContain Constraint.MinLength(1)
+        alias.constraints shouldContain Constraint.MaxLength(100)
+        alias.constraints shouldContain Constraint.Pattern("[a-z]+")
+    }
+
+    // ── Test 10: top-level element with inline complexType ────────────────────
+
+    @Test
+    fun `top-level element with inline complexType produces named ComplexType`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="shiporder">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="orderperson" type="xs:string"/>
+                  </xs:sequence>
+                  <xs:attribute name="orderid" type="xs:string" use="required"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "shiporder" }.shouldNotBeNull()
+        type.properties.find { it.schemaName == "orderperson" }!!.type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        type.properties.find { it.schemaName == "orderid" }!!.nullable shouldBe false
+    }
+
+    // ── Test 11: built-in type mapping ───────────────────────────────────────
+
+    @Test
+    fun `XSD built-in types map to correct PrimitiveType values`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Primitives">
+                <xs:sequence>
+                  <xs:element name="amount" type="xs:decimal"/>
+                  <xs:element name="count" type="xs:integer"/>
+                  <xs:element name="active" type="xs:boolean"/>
+                  <xs:element name="link" type="xs:anyURI"/>
+                  <xs:element name="photo" type="xs:base64Binary"/>
+                  <xs:element name="width" type="xs:float"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Primitives" }.shouldNotBeNull()
+        fun prop(name: String) = type.properties.find { it.schemaName == name }!!.type
+        prop("amount") shouldBe TypeRef.Primitive(PrimitiveType.DECIMAL)
+        prop("count") shouldBe TypeRef.Primitive(PrimitiveType.LONG)
+        prop("active") shouldBe TypeRef.Primitive(PrimitiveType.BOOLEAN)
+        prop("link") shouldBe TypeRef.Primitive(PrimitiveType.URI)
+        prop("photo") shouldBe TypeRef.Primitive(PrimitiveType.BYTES)
+        prop("width") shouldBe TypeRef.Primitive(PrimitiveType.FLOAT)
+    }
+
+    // ── Test 12: named type reference from element type attribute ─────────────
+
+    @Test
+    fun `element type attribute referencing named type produces TypeRef_Named`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Order">
+                <xs:sequence>
+                  <xs:element name="shipTo" type="Address"/>
+                </xs:sequence>
+              </xs:complexType>
+              <xs:complexType name="Address">
+                <xs:sequence>
+                  <xs:element name="street" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val order = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Order" }.shouldNotBeNull()
+        order.properties.find { it.schemaName == "shipTo" }!!.type shouldBe TypeRef.Named("Address")
+    }
+
+    // ── Test 13: hyphenated element name → camelCase kotlinName ──────────────
+
+    @Test
+    fun `hyphenated element name becomes camelCase kotlinName with schemaName preserved`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Person">
+                <xs:sequence>
+                  <xs:element name="first-name" type="xs:string"/>
+                  <xs:element name="date_of_birth" type="xs:date"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Person" }.shouldNotBeNull()
+
+        val firstNameProp = type.properties.find { it.schemaName == "first-name" }.shouldNotBeNull()
+        firstNameProp.kotlinName shouldBe "firstName"
+
+        val dobProp = type.properties.find { it.schemaName == "date_of_birth" }.shouldNotBeNull()
+        dobProp.kotlinName shouldBe "dateOfBirth"
+        dobProp.type shouldBe TypeRef.Primitive(PrimitiveType.DATE)
+    }
+
+    // ── Test 14: inline nested complexType creates named type ─────────────────
+
+    @Test
+    fun `inline nested complexType inside element creates named type in model`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Order">
+                <xs:sequence>
+                  <xs:element name="item" maxOccurs="unbounded">
+                    <xs:complexType>
+                      <xs:sequence>
+                        <xs:element name="title" type="xs:string"/>
+                        <xs:element name="price" type="xs:decimal"/>
+                      </xs:sequence>
+                    </xs:complexType>
+                  </xs:element>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        // The inline type should be registered with a generated name
+        val inlineType = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.properties.any { p -> p.schemaName == "price" } }.shouldNotBeNull()
+        inlineType.properties.find { it.schemaName == "title" }!!.type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+
+        // Order should reference the inline type as a list
+        val order = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Order" }.shouldNotBeNull()
+        val itemProp = order.properties.find { it.schemaName == "item" }.shouldNotBeNull()
+        itemProp.type.shouldBeInstanceOf<TypeRef.ListOf>()
+    }
+}
