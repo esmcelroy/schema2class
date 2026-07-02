@@ -25,7 +25,7 @@ Developers who need to consume XSD contracts in Kotlin are forced to wrap xjc-ge
 - **Idiomatic Kotlin output**: data classes, sealed classes, enums, nullable types, value classes
 - **Annotation-aware**: optionally emits `@Serializable` (kotlinx.serialization), Jackson, or annotation-free output
 - **Multiplatform-ready**: core IR and codegen target Kotlin Multiplatform; parsers are JVM-only today (XSD/JSON parsing depends on JVM XML/JSON libs) but the architecture leaves room to expand
-- **Composable**: schemas can be composed, referenced, and extended — including **across formats**: the shared IR makes it possible to type an XML envelope (XSD) whose elements carry embedded JSON payloads (JSON Schema) in one generation pass, something no existing tool can do (`schema2class-sqb`)
+- **Composable**: schemas can be composed, referenced, and extended. Mixed-format projects are first-class: one build can process an `.xsd` and a `schema.json` side by side — e.g. a format where an XML document (XSD-described) has an element whose text content is JSON (JSON Schema-described) — generating envelope and payload classes together (`schema2class-sqb`)
 
 ---
 
@@ -61,11 +61,13 @@ The gap between toolchain (21) and target (17) costs nothing: consumers get a li
 
 ## Format Extension Points (post-v1 roadmap)
 
-**Cross-format composition (`schema2class-sqb`)** sits above this list: an XML envelope
-(XSD-described) with embedded JSON payloads (JSON Schema-described) typed end-to-end in
-one generation pass. It is a confirmed user need, is uniquely enabled by the shared IR,
-and requires both format halves to stay first-class — XSD work is sequenced first, but
-JSON Schema features are not deprioritized.
+**Mixed-format projects (`schema2class-sqb`)** sit above this list: a confirmed user
+workflow pairs an `.xsd` (XML envelope) with a `schema.json` (payload carried as JSON
+text inside one XML element). This needs no IR-level cross-format linkage — the
+JSON-bearing element stays a `String` and the payload class is generated from its own
+schema — but it does require the Gradle plugin and CLI to accept both formats in one
+invocation with per-schema package configuration. It also keeps both format halves
+first-class: XSD work is sequenced first, but JSON Schema is not deprioritized.
 
 Remaining extension points, ranked by the July 2026 domain survey (`docs/domain-survey.md`):
 
