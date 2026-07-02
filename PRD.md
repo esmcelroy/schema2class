@@ -65,7 +65,7 @@ The gap between toolchain (21) and target (17) costs nothing: consumers get a li
 schema2class/
 ├── core/                    # IR definitions + codegen interfaces
 │   └── src/
-├── parser-xsd/              # XSD → IR (JVM, depends on JAXB/StAX)
+├── parser-xsd/              # XSD → IR (JVM, JDK built-in XML DOM — no external deps)
 │   └── src/
 ├── parser-jsonschema/       # JSON Schema → IR (JVM, depends on Jackson)
 │   └── src/
@@ -83,15 +83,21 @@ schema2class/
 The IR is the central contract. Both parsers produce IR; the codegen consumes IR. This decouples schema format from output language and makes future parsers (OpenAPI, Avro, Protobuf) or future targets (TypeScript, Swift) possible.
 
 ```
-SchemaModel
-  ├── TypeDefinition (sealed)
-  │   ├── ComplexType       → data class
-  │   ├── SimpleType        → type alias or value class
-  │   ├── EnumType          → enum class
-  │   └── UnionType         → sealed class hierarchy
-  ├── PropertyDefinition    → property on a data class
-  │   ├── name, type ref, nullability, default, validation constraints
-  └── Namespace             → Kotlin package mapping
+SchemaModel (namespace, packageName, types, sourceFormat)
+  └── TypeDefinition (sealed)
+      ├── ComplexType       → data class
+      │     properties, superType (xs:extension),
+      │     contentProperty (xs:simpleContent text body, emitted first)
+      ├── AliasType         → typealias (value class later); carries Constraints
+      ├── EnumType          → enum class
+      │     EnumValue keeps serializedValue (wire) + kotlinName (constant) separate,
+      │     so non-identifier values like UNECE numeric codes stay round-trippable
+      └── UnionType         → sealed class hierarchy of data class variants
+
+  PropertyDefinition        → constructor property
+      schemaName, kotlinName, TypeRef, nullable, defaultValue, constraints
+  TypeRef (sealed)          → Named (cross-package capable) | Primitive | ListOf
+  Constraint (sealed)       → MinLength, MaxLength, Pattern, Min/MaxValue, Min/MaxItems
 ```
 
 ### Codegen output examples
@@ -128,35 +134,43 @@ enum class Color { RED, GREEN, BLUE }
 ## Phased Delivery Plan
 
 ### Phase 1 — Foundation
-- Project scaffold (Gradle multi-module, Kotlin, publishing config)
-- Core IR data model
-- JSON Schema parser (draft-07 baseline)
-- Kotlin codegen for data classes and enums
-- Unit tests for round-trip: schema → IR → Kotlin source
+- [x] Project scaffold (Gradle multi-module, Kotlin, publishing config)
+- [x] Core IR data model
+- [x] JSON Schema parser (draft-07 baseline; `allOf` follow-up tracked)
+- [x] Kotlin codegen for data classes, enums, sealed classes, typealiases
+- [ ] Unit test suite: schema → IR → Kotlin round-trip (parser and codegen each
+      have unit tests; the dedicated round-trip suite is `schema2class-7oe`)
 
 ### Phase 2 — XSD Support
-- XSD parser (complex types, simple types, enumerations, sequences, choices)
-- Namespace → package mapping
-- XSD-specific constraints (minOccurs/maxOccurs → List/nullable)
+- [x] XSD parser (complex types, simple types, enumerations, sequences,
+      attributes, simpleContent, inline anonymous types)
+- [x] XSD-specific constraints (minOccurs/maxOccurs → List/nullable,
+      use=required → non-null)
+- [ ] `xs:choice` → UnionType (`schema2class-eq1`)
+- [ ] Namespace → package mapping (`schema2class-7h1`)
+- [ ] `xs:import` / `xs:include` multi-file resolution
 
 ### Phase 3 — Advanced Type Mapping
-- `oneOf`/`anyOf`/`choice` → sealed class hierarchies
-- `$ref` and `$defs` resolution (JSON Schema)
-- `xs:extension` / `xs:restriction` inheritance mapping
-- Value class generation for constrained simple types
-- Default value emission
+- [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)
+- [x] `$ref` and `$defs` resolution — same-document and circular refs;
+      external file refs still open (`schema2class-1so`)
+- [ ] `xs:extension` / `xs:restriction` inheritance mapping — basic
+      extension → superType done; full semantics are `schema2class-8kr`
+- [ ] Value class generation for constrained simple types
+- [ ] Default value emission — JSON Schema `default` done; XSD `default`/`fixed`
+      attributes still open
 
 ### Phase 4 — Build Tooling
-- Gradle plugin (`schema2classGenerate` task)
-- CLI (`schema2class generate --input schema.xsd --output src/`)
-- Source set wiring (generated sources added to compile classpath)
+- [ ] Gradle plugin (`schema2classGenerate` task)
+- [ ] CLI (`schema2class generate --input schema.xsd --output src/`)
+- [ ] Source set wiring (generated sources added to compile classpath)
 
 ### Phase 5 — Quality & Ecosystem
-- Annotation modes: kotlinx.serialization, Jackson, none
-- Dokka API docs
-- Integration tests (generate → compile → deserialize real documents)
-- Publishing to Maven Central
-- Documentation site
+- [ ] Annotation modes: kotlinx.serialization, Jackson, none
+- [ ] Dokka API docs
+- [ ] Integration tests (generate → compile → deserialize real documents)
+- [ ] Publishing to Maven Central
+- [ ] Documentation site
 
 ---
 
@@ -184,7 +198,7 @@ Rationale:
 
 ## Open Questions
 
-1. **Value classes**: Should constrained simple types (e.g. `xs:string` with `maxLength`) become `@JvmInline value class`? Ergonomic but adds boxing complexity.
-2. **Nullability strategy**: XSD `minOccurs=0` vs JSON Schema `required` array — need a unified nullability model in IR.
-3. **Kotlin package naming**: XSD namespaces (URIs) → Kotlin packages needs a configurable mapping strategy.
-4. **Annotation conflicts**: A field might need both a kotlinx and a Jackson annotation; should we emit both or let the user pick a mode?
+1. **Value classes**: Should constrained simple types (e.g. `xs:string` with `maxLength`) become `@JvmInline value class`? Ergonomic but adds boxing complexity. Tracked as `schema2class-5vw`.
+2. ~~**Nullability strategy**~~ **Resolved**: nullability lives on `PropertyDefinition.nullable`, never on `TypeRef`. XSD `minOccurs=0` / `use="optional"` and JSON Schema absence-from-`required` all map to `nullable = true`, and codegen emits `= null` defaults for nullable properties.
+3. **Kotlin package naming**: XSD namespaces (URIs) → Kotlin packages needs a configurable mapping strategy. Tracked as `schema2class-7h1`.
+4. **Annotation conflicts**: A field might need both a kotlinx and a Jackson annotation; should we emit both or let the user pick a mode? Current lean: annotation mode is a single codegen option (`schema2class-9oo`, `schema2class-n0g`).
