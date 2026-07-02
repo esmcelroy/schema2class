@@ -25,7 +25,7 @@ Developers who need to consume XSD contracts in Kotlin are forced to wrap xjc-ge
 - **Idiomatic Kotlin output**: data classes, sealed classes, enums, nullable types, value classes
 - **Annotation-aware**: optionally emits `@Serializable` (kotlinx.serialization), Jackson, or annotation-free output
 - **Multiplatform-ready**: core IR and codegen target Kotlin Multiplatform; parsers are JVM-only today (XSD/JSON parsing depends on JVM XML/JSON libs) but the architecture leaves room to expand
-- **Composable**: schemas can be composed, referenced, and extended
+- **Composable**: schemas can be composed, referenced, and extended — including **across formats**: the shared IR makes it possible to type an XML envelope (XSD) whose elements carry embedded JSON payloads (JSON Schema) in one generation pass, something no existing tool can do (`schema2class-sqb`)
 
 ---
 
@@ -61,7 +61,13 @@ The gap between toolchain (21) and target (17) costs nothing: consumers get a li
 
 ## Format Extension Points (post-v1 roadmap)
 
-Ranked by the July 2026 domain survey (`docs/domain-survey.md`):
+**Cross-format composition (`schema2class-sqb`)** sits above this list: an XML envelope
+(XSD-described) with embedded JSON payloads (JSON Schema-described) typed end-to-end in
+one generation pass. It is a confirmed user need, is uniquely enabled by the shared IR,
+and requires both format halves to stay first-class — XSD work is sequenced first, but
+JSON Schema features are not deprioritized.
+
+Remaining extension points, ranked by the July 2026 domain survey (`docs/domain-survey.md`):
 
 1. **xmlutil annotation mode** — pdvrieze/xmlutil is the de-facto kotlinx.serialization
    XML format (KMP-ready). Emitting `@XmlSerialName`/`@XmlElement`/`@XmlValue` from the
