@@ -2,16 +2,20 @@
 
 ## Problem
 
-The Kotlin ecosystem has a significant gap: there is no Kotlin-native, programmatic library for generating idiomatic Kotlin classes from standard schema formats (XSD and JSON Schema). Existing options all fall short:
+The Kotlin ecosystem has a significant gap: **no maintained tool generates idiomatic Kotlin from XSD, and no tool of any kind covers both XSD and JSON Schema through one pipeline.** A domain survey (see `docs/domain-survey.md`, July 2026) confirmed the XSD side is an empty niche and identified one active competitor on the JSON Schema side:
 
-| Tool | Language | Schema support | Kotlin output | Programmatic API | KMP-ready |
+| Tool | Language | Schema support | Kotlin output | Programmatic API | Maintained |
 |---|---|---|---|---|---|
-| JAXB | Java | XSD | No (Java) | Partial | No |
-| jsonschema2pojo | Java | JSON Schema | Partial (annotations) | No (CLI/Maven/Gradle) | No |
-| xjc | Java | XSD | No (Java) | No (CLI) | No |
+| JAXB / xjc | Java | XSD | No (Java) | Partial | Yes (Java-only forever) |
+| KAXB | Kotlin | XSD | Yes | No | **Abandoned** (no releases) |
+| schema-gen | Groovy | XSD | Partial | No | Dormant, untested |
+| jsonschema2pojo | Java | JSON Schema | No (Java) | No (CLI/Maven/Gradle) | Yes |
+| json-kotlin-schema-codegen | Kotlin | JSON Schema only | Yes | Yes | Yes (single maintainer) |
+| quicktype | TypeScript | JSON Schema | Secondary target | No (Node CLI) | Yes |
+| Fabrikt | Kotlin | OpenAPI 3 only | Yes | Yes | Yes |
 | kotlinx.serialization | Kotlin | Runtime only | N/A (serialization, not gen) | N/A | Yes |
 
-Developers who need to consume XSD or JSON Schema contracts in Kotlin projects are forced to either wrap Java-generated code (losing idiomatic Kotlin) or write data classes by hand (error-prone at scale, breaks on schema updates).
+Developers who need to consume XSD contracts in Kotlin are forced to wrap xjc-generated Java (platform types, no data classes, no sealed hierarchies) or hand-write classes. On the JSON Schema side, `json-kotlin-schema-codegen` is credible but single-format; teams with mixed XML + JSON contracts need two disjoint toolchains with inconsistent output. Fabrikt proves the architecture (Kotlin-native, KotlinPoet, Gradle plugin) earns adoption — for OpenAPI. schema2class applies it to the two formats left unserved, unified on one IR.
 
 ## Vision
 
@@ -54,6 +58,23 @@ The gap between toolchain (21) and target (17) costs nothing: consumers get a li
 - XSD 2.0
 - Full JSON Schema vocabularies beyond the core (hyper-schema, etc.)
 - Kotlin 2.x / K2 compiler (tracked for future upgrade)
+
+## Format Extension Points (post-v1 roadmap)
+
+Ranked by the July 2026 domain survey (`docs/domain-survey.md`):
+
+1. **xmlutil annotation mode** — pdvrieze/xmlutil is the de-facto kotlinx.serialization
+   XML format (KMP-ready). Emitting `@XmlSerialName`/`@XmlElement`/`@XmlValue` from the
+   IR's `PropertyKind` makes XSD-sourced classes actually round-trip XML on multiplatform.
+2. **WSDL types frontend** — extract the XSD embedded in `<wsdl:types>` and feed the
+   existing parser. Typed SOAP payloads without generating service stubs (which remain
+   out of scope). Today's alternative is JAXWS → Java.
+3. **DTD / RELAX NG via trang** — do not write parsers for these; document (and
+   optionally wrap in the CLI) a trang conversion step (DTD/RNG → XSD → schema2class).
+4. **OpenAPI 3.1** — embeds JSON Schema 2020-12; our JSON Schema parser is the reuse
+   path. Fabrikt owns OpenAPI 3.0 today; no head-on competition planned.
+
+Not pursuing: Schematron (rule-based, not structural), WADL/XML Beans/Castor (dead ecosystems).
 
 ---
 
