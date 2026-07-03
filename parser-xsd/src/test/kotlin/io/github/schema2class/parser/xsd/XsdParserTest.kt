@@ -328,7 +328,43 @@ class XsdParserTest {
         dobProp.type shouldBe TypeRef.Primitive(PrimitiveType.DATE)
     }
 
-    // ── Test 14: inline nested complexType creates named type ─────────────────
+    // ── Tests 14-16: package derivation from targetNamespace ─────────────────
+
+    @Test
+    fun `parse without packageName derives package from targetNamespace`() {
+        val model = parser.parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                       targetNamespace="urn:test:business-doc"/>
+            """.trimIndent().byteInputStream(),
+        )
+        model.packageName shouldBe "test.business_doc"
+    }
+
+    @Test
+    fun `parse without packageName and without targetNamespace uses default package`() {
+        val model = parser.parse(
+            """<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>""".byteInputStream(),
+        )
+        model.packageName shouldBe "generated"
+    }
+
+    @Test
+    fun `parse with configured mapper applies basePackage and overrides`() {
+        val mapper = io.github.schema2class.core.naming.NamespacePackageMapper(
+            basePackage = "com.corp.gen",
+        )
+        val model = parser.parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                       targetNamespace="http://maven.apache.org/POM/4.0.0"/>
+            """.trimIndent().byteInputStream(),
+            mapper,
+        )
+        model.packageName shouldBe "com.corp.gen.org.apache.maven.pom._4_0_0"
+    }
+
+    // ── Test 17: inline nested complexType creates named type ─────────────────
 
     @Test
     fun `inline nested complexType inside element creates named type in model`() {

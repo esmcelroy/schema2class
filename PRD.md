@@ -176,8 +176,8 @@ enum class Color { RED, GREEN, BLUE }
 - [x] XSD-specific constraints (minOccurs/maxOccurs → List/nullable,
       use=required → non-null)
 - [ ] `xs:choice` → UnionType (`schema2class-eq1`)
-- [ ] Namespace → package mapping (`schema2class-7h1`)
-- [ ] `xs:import` / `xs:include` multi-file resolution
+- [x] Namespace → package mapping (`NamespacePackageMapper`, see `docs/namespace-mapping.md`)
+- [ ] `xs:import` / `xs:include` multi-file resolution (`schema2class-y7w`)
 
 ### Phase 3 — Advanced Type Mapping
 - [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)
@@ -229,5 +229,5 @@ Rationale:
 
 1. **Value classes**: Should constrained simple types (e.g. `xs:string` with `maxLength`) become `@JvmInline value class`? Ergonomic but adds boxing complexity. Tracked as `schema2class-5vw`.
 2. ~~**Nullability strategy**~~ **Resolved**: nullability lives on `PropertyDefinition.nullable`, never on `TypeRef`. XSD `minOccurs=0` / `use="optional"` and JSON Schema absence-from-`required` all map to `nullable = true`, and codegen emits `= null` defaults for nullable properties.
-3. **Kotlin package naming**: XSD namespaces (URIs) → Kotlin packages needs a configurable mapping strategy. Tracked as `schema2class-7h1`.
+3. ~~**Kotlin package naming**~~ **Resolved**: `NamespacePackageMapper` in core derives packages from namespace URIs (JAXB-style reverse-domain for http(s), ordered segments for urn), with `basePackage`/`overrides`/`defaultPackage` config and deterministic collision suffixes. See `docs/namespace-mapping.md`.
 4. **Annotation conflicts**: A field might need both a kotlinx and a Jackson annotation; should we emit both or let the user pick a mode? Current lean: annotation mode is a single codegen option (`schema2class-9oo`, `schema2class-n0g`).

@@ -1,5 +1,5 @@
 dependencies {
-    implementation(project(":core"))
+    api(project(":core"))
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinpoet)
 

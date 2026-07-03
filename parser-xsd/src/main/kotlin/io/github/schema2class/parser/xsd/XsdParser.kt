@@ -8,6 +8,7 @@ import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
+import io.github.schema2class.core.naming.NamespacePackageMapper
 import org.w3c.dom.Element
 import java.io.File
 import java.io.InputStream
@@ -17,14 +18,33 @@ private const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
 class XsdParser {
 
-    fun parse(inputStream: InputStream, packageName: String): SchemaModel {
-        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-        val doc = factory.newDocumentBuilder().parse(inputStream)
-        return ParseContext(doc.documentElement, packageName).parse()
-    }
+    fun parse(inputStream: InputStream, packageName: String): SchemaModel =
+        ParseContext(parseDocument(inputStream), packageName).parse()
 
     fun parse(file: File, packageName: String): SchemaModel =
         file.inputStream().use { parse(it, packageName) }
+
+    /** Derives the Kotlin package from the schema's targetNamespace via [packageMapper]. */
+    fun parse(
+        inputStream: InputStream,
+        packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+    ): SchemaModel {
+        val root = parseDocument(inputStream)
+        val namespace = root.getAttribute("targetNamespace").ifBlank { null }
+        return ParseContext(root, packageMapper.toPackage(namespace)).parse()
+    }
+
+    /** Derives the Kotlin package from the schema's targetNamespace via [packageMapper]. */
+    fun parse(
+        file: File,
+        packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+    ): SchemaModel =
+        file.inputStream().use { parse(it, packageMapper) }
+
+    private fun parseDocument(inputStream: InputStream): Element {
+        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        return factory.newDocumentBuilder().parse(inputStream).documentElement
+    }
 
     private inner class ParseContext(
         private val schemaRoot: Element,

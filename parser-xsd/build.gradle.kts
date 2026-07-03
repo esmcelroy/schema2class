@@ -1,5 +1,5 @@
 dependencies {
-    implementation(project(":core"))
+    api(project(":core"))
     implementation(libs.kotlin.stdlib)
     // XML parsing via JDK built-in StAX (javax.xml.stream) — no extra dependency needed
 

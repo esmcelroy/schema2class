@@ -4,6 +4,9 @@ plugins {
 
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
+    // Parsers and codegen expose core IR types in their public APIs, so modules
+    // need the `api` dependency configuration.
+    apply(plugin = "java-library")
 
     repositories {
         mavenCentral()
