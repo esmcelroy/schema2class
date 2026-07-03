@@ -393,6 +393,24 @@ class KotlinCodegenTest {
     }
 
     // -----------------------------------------------------------------------
+    // 10. ComplexType with no properties → plain class, not data class
+    // -----------------------------------------------------------------------
+    @Test
+    fun `ComplexType with no properties generates plain class without data modifier`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Placeholder",
+            kotlinName = "Placeholder",
+            documentation = null,
+            properties = emptyList(),
+        )
+
+        val source = sourceFor(generate(type), "Placeholder")
+        source shouldContain "class Placeholder"
+        source shouldNotContain "data class"
+        source shouldNotContain "Placeholder()"
+    }
+
+    // -----------------------------------------------------------------------
     // Additional: file path is correctly derived from package and type name
     // -----------------------------------------------------------------------
     @Test

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-written test fixture mimicking the UN/CEFACT core component type patterns:
+     xs:simpleContent + xs:extension, numeric codelist enums with ccts:Name annotations,
+     and constrained simple types. -->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:ccts="urn:test:ccts"
+            xmlns:tns="urn:test:business-doc"
+            targetNamespace="urn:test:business-doc"
+            elementFormDefault="qualified">
+
+  <xsd:complexType name="AmountType">
+    <xsd:annotation>
+      <xsd:documentation xml:lang="en">
+        <ccts:Description>A number of monetary units specified in a currency.</ccts:Description>
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:decimal">
+        <xsd:attribute name="currencyID" type="xsd:token" use="required"/>
+        <xsd:attribute name="currencyCodeListVersionID" type="xsd:token" use="optional"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+
+  <xsd:complexType name="TextType">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:string">
+        <xsd:attribute name="languageID" type="xsd:language" use="optional"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+
+  <xsd:simpleType name="ActionCodeContentType">
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="1">
+        <xsd:annotation>
+          <xsd:documentation xml:lang="en">
+            <ccts:Name>Added</ccts:Name>
+            <ccts:Description>The information is to be or has been added.</ccts:Description>
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:enumeration>
+      <xsd:enumeration value="2">
+        <xsd:annotation>
+          <xsd:documentation xml:lang="en">
+            <ccts:Name>Deleted</ccts:Name>
+            <ccts:Description>The information is to be or has been deleted.</ccts:Description>
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:enumeration>
+      <xsd:enumeration value="3">
+        <xsd:annotation>
+          <xsd:documentation xml:lang="en">
+            <ccts:Name>Changed</ccts:Name>
+            <ccts:Description>The information is to be or has been changed.</ccts:Description>
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:enumeration>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="ReferenceIdType">
+    <xsd:restriction base="xsd:string">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="35"/>
+      <xsd:pattern value="[A-Z0-9-]+"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:complexType name="InvoiceLineType">
+    <xsd:sequence>
+      <xsd:element name="lineNumber" type="xsd:int"/>
+      <xsd:element name="description" type="tns:TextType" minOccurs="0"/>
+      <xsd:element name="lineAmount" type="tns:AmountType"/>
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:complexType name="InvoiceType">
+    <xsd:sequence>
+      <xsd:element name="referenceId" type="tns:ReferenceIdType"/>
+      <xsd:element name="actionCode" type="tns:ActionCodeContentType" minOccurs="0"/>
+      <xsd:element name="issueDate" type="xsd:date"/>
+      <xsd:element name="attachment" type="xsd:base64Binary" minOccurs="0"/>
+      <xsd:element name="line" type="tns:InvoiceLineType" maxOccurs="unbounded"/>
+      <xsd:element name="totalAmount" type="tns:AmountType"/>
+    </xsd:sequence>
+    <xsd:attribute name="documentID" type="xsd:string" use="required"/>
+  </xsd:complexType>
+
+  <xsd:element name="Invoice" type="tns:InvoiceType"/>
+</xsd:schema>

@@ -52,9 +52,15 @@ class KotlinCodegen {
     }
 
     private fun generateComplexType(type: TypeDefinition.ComplexType, packageName: String): TypeSpec {
+        val allProps = listOfNotNull(type.contentProperty) + type.properties
+
         val constructorBuilder = FunSpec.constructorBuilder()
         val typeBuilder = TypeSpec.classBuilder(type.kotlinName)
-            .addModifiers(KModifier.DATA)
+        // A data class requires at least one constructor property; schemas can produce
+        // empty types (e.g. xs:any-only wrappers), which must be plain classes.
+        if (allProps.isNotEmpty()) {
+            typeBuilder.addModifiers(KModifier.DATA)
+        }
 
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
@@ -62,8 +68,6 @@ class KotlinCodegen {
         if (superType != null) {
             typeBuilder.superclass(superType.toKotlinTypeName(packageName))
         }
-
-        val allProps = listOfNotNull(type.contentProperty) + type.properties
 
         for (prop in allProps) {
             val typeName = prop.type.toKotlinTypeName(packageName)
@@ -84,7 +88,9 @@ class KotlinCodegen {
             typeBuilder.addProperty(propBuilder.build())
         }
 
-        typeBuilder.primaryConstructor(constructorBuilder.build())
+        if (allProps.isNotEmpty()) {
+            typeBuilder.primaryConstructor(constructorBuilder.build())
+        }
         return typeBuilder.build()
     }
 
