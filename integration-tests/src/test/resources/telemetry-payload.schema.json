@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/telemetry-payload.json",
+  "title": "TelemetryPayload",
+  "type": "object",
+  "description": "Payload embedded as JSON text inside an XML envelope element.",
+  "required": ["deviceId", "recordedAt", "readings"],
+  "properties": {
+    "deviceId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "firmware-version": { "type": "string" },
+    "battery": { "type": ["number", "null"] },
+    "status": { "$ref": "#/$defs/Status" },
+    "readings": { "type": "array", "items": { "$ref": "#/$defs/Reading" } },
+    "threshold": { "$ref": "#/$defs/Threshold" }
+  },
+  "$defs": {
+    "Status": {
+      "type": "string",
+      "enum": ["ok", "degraded", "offline"]
+    },
+    "Reading": {
+      "type": "object",
+      "required": ["sensor", "value"],
+      "properties": {
+        "sensor": { "type": "string" },
+        "value": { "type": "number" },
+        "unit": { "type": "string", "default": "celsius" }
+      }
+    },
+    "Threshold": {
+      "oneOf": [
+        { "type": "number" },
+        { "type": "string" }
+      ]
+    }
+  }
+}

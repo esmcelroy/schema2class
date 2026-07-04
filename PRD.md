@@ -197,7 +197,9 @@ enum class Color { RED, GREEN, BLUE }
 ### Phase 5 — Quality & Ecosystem
 - [ ] Annotation modes: kotlinx.serialization, Jackson, none
 - [ ] Dokka API docs
-- [ ] Integration tests (generate → compile → deserialize real documents)
+- [x] Integration tests (generate → compile with real kotlinc → instantiate →
+      JSON document round-trip via Jackson; XML document round-trips arrive
+      with the annotation modes)
 - [ ] Publishing to Maven Central
 - [ ] Documentation site
 

@@ -11,4 +11,5 @@ include(
     "codegen-kotlin",
     "cli",
     "gradle-plugin",
+    "integration-tests",
 )
