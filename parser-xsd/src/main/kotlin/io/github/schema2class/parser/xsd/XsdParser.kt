@@ -18,8 +18,10 @@ private const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
 class XsdParser {
 
-    fun parse(inputStream: InputStream, packageName: String): SchemaModel =
-        ParseContext(parseDocument(inputStream), packageName).parse()
+    fun parse(inputStream: InputStream, packageName: String): SchemaModel {
+        val root = parseDocument(inputStream)
+        return ParseContext(listOf(root), targetNamespaceOf(root), packageName).parse()
+    }
 
     fun parse(file: File, packageName: String): SchemaModel =
         file.inputStream().use { parse(it, packageName) }
@@ -30,8 +32,13 @@ class XsdParser {
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
     ): SchemaModel {
         val root = parseDocument(inputStream)
-        val namespace = root.getAttribute("targetNamespace").ifBlank { null }
-        return ParseContext(root, packageMapper.toPackage(namespace)).parse()
+        val namespace = targetNamespaceOf(root)
+        return ParseContext(
+            roots = listOf(root),
+            targetNamespace = namespace,
+            packageName = packageMapper.toPackage(namespace),
+            fallbackMapper = packageMapper,
+        ).parse()
     }
 
     /** Derives the Kotlin package from the schema's targetNamespace via [packageMapper]. */
@@ -41,28 +48,136 @@ class XsdParser {
     ): SchemaModel =
         file.inputStream().use { parse(it, packageMapper) }
 
+    /**
+     * Parses [file] and everything reachable through xs:include and xs:import, returning
+     * one [SchemaModel] per namespace (the entry file's namespace first).
+     *
+     * - Each document is parsed once, keyed by canonical path; include/import cycles are safe.
+     * - xs:include splices the included document into the including namespace; a chameleon
+     *   include (no targetNamespace of its own) adopts the includer's namespace.
+     * - xs:import namespaces map to their own packages via [packageMapper.toPackages], so
+     *   cross-namespace references become cross-package TypeRef.Named. Imports without a
+     *   resolvable schemaLocation still get a stable package for references; a warning is
+     *   emitted and no model is generated for them.
+     * - Remote (http/https) schemaLocations are not fetched; a warning is emitted.
+     */
+    fun parseWithImports(
+        file: File,
+        packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+    ): List<SchemaModel> {
+        val loader = SchemaSetLoader()
+        loader.load(file.canonicalFile, adoptedNamespace = null)
+
+        val rootsByNamespace = LinkedHashMap<String?, MutableList<Element>>()
+        for (doc in loader.docs.values) {
+            rootsByNamespace.getOrPut(doc.effectiveNamespace) { mutableListOf() }.add(doc.root)
+        }
+
+        val allNamespaces = LinkedHashSet<String?>(rootsByNamespace.keys)
+        allNamespaces.addAll(loader.declaredImportNamespaces)
+        val packages = packageMapper.toPackages(allNamespaces)
+
+        return rootsByNamespace.map { (namespace, roots) ->
+            ParseContext(
+                roots = roots,
+                targetNamespace = namespace,
+                packageName = packages.getValue(namespace),
+                packagesByNamespace = packages,
+                fallbackMapper = packageMapper,
+            ).parse()
+        }
+    }
+
     private fun parseDocument(inputStream: InputStream): Element {
         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         return factory.newDocumentBuilder().parse(inputStream).documentElement
     }
 
+    private fun targetNamespaceOf(root: Element): String? =
+        root.getAttribute("targetNamespace").ifBlank { null }
+
+    private fun warn(message: String) {
+        System.err.println("schema2class: WARNING: $message")
+    }
+
+    // ── Multi-file loading ────────────────────────────────────────────────────
+
+    private class LoadedDoc(val root: Element, val effectiveNamespace: String?)
+
+    private inner class SchemaSetLoader {
+        /** Canonical path → document, in load order (entry document first). */
+        val docs = LinkedHashMap<String, LoadedDoc>()
+
+        /** Namespaces declared on xs:import, whether or not their documents were loadable. */
+        val declaredImportNamespaces = LinkedHashSet<String>()
+
+        fun load(file: File, adoptedNamespace: String?) {
+            val key = file.canonicalPath
+            if (docs.containsKey(key)) return
+            if (!file.isFile) {
+                warn("schemaLocation does not exist: $file")
+                return
+            }
+            val root = file.inputStream().use { parseDocument(it) }
+            val effectiveNamespace = targetNamespaceOf(root) ?: adoptedNamespace
+            // Register before recursing so include/import cycles terminate.
+            docs[key] = LoadedDoc(root, effectiveNamespace)
+
+            for (include in xsdChildren(root, "include")) {
+                val location = include.getAttribute("schemaLocation").ifBlank { null } ?: continue
+                resolveLocation(file, location)?.let { load(it, effectiveNamespace) }
+            }
+            for (import in xsdChildren(root, "import")) {
+                import.getAttribute("namespace").ifBlank { null }
+                    ?.let { declaredImportNamespaces.add(it) }
+                val location = import.getAttribute("schemaLocation").ifBlank { null }
+                if (location == null) {
+                    warn(
+                        "xs:import for namespace '${import.getAttribute("namespace")}' has no " +
+                            "schemaLocation; its types resolve by derived package only",
+                    )
+                    continue
+                }
+                resolveLocation(file, location)?.let { load(it, adoptedNamespace = null) }
+            }
+        }
+
+        private fun resolveLocation(from: File, location: String): File? = when {
+            location.startsWith("http://") || location.startsWith("https://") -> {
+                warn("remote schemaLocation is not fetched: $location")
+                null
+            }
+            File(location).isAbsolute -> File(location).canonicalFile
+            else -> File(from.parentFile, location).canonicalFile
+        }
+    }
+
+    // ── Parsing one namespace (one or more documents) into a SchemaModel ─────
+
     private inner class ParseContext(
-        private val schemaRoot: Element,
+        private val roots: List<Element>,
+        private val targetNamespace: String?,
         private val packageName: String,
+        private val packagesByNamespace: Map<String?, String> = emptyMap(),
+        private val fallbackMapper: NamespacePackageMapper = NamespacePackageMapper(),
     ) {
         private val types = mutableListOf<TypeDefinition>()
-        private val targetNamespace: String? =
-            schemaRoot.getAttribute("targetNamespace").ifBlank { null }
 
         fun parse(): SchemaModel {
             // Top-level simpleType first — referenced by complexTypes
-            xsdChildren(schemaRoot, "simpleType").forEach { el ->
-                el.getAttribute("name").ifBlank { null }?.let { processSimpleType(el, it) }
+            for (root in roots) {
+                xsdChildren(root, "simpleType").forEach { el ->
+                    el.getAttribute("name").ifBlank { null }?.let { processSimpleType(el, it) }
+                }
             }
-            xsdChildren(schemaRoot, "complexType").forEach { el ->
-                el.getAttribute("name").ifBlank { null }?.let { processComplexType(el, it) }
+            for (root in roots) {
+                xsdChildren(root, "complexType").forEach { el ->
+                    el.getAttribute("name").ifBlank { null }?.let { processComplexType(el, it) }
+                }
             }
-            xsdChildren(schemaRoot, "element").forEach { processTopLevelElement(it) }
+            for (root in roots) {
+                xsdChildren(root, "element").forEach { processTopLevelElement(it) }
+            }
 
             return SchemaModel(
                 namespace = targetNamespace,
@@ -177,7 +292,7 @@ class XsdParser {
             val contentProperty = PropertyDefinition(
                 schemaName = "value",
                 kotlinName = "value",
-                type = resolveTypeRef(base),
+                type = resolveTypeRef(base, extension),
                 nullable = false,
                 defaultValue = null,
                 documentation = null,
@@ -196,7 +311,7 @@ class XsdParser {
         private fun processComplexContent(typeEl: Element, schemaName: String, complexContent: Element) {
             val extension = xsdChild(complexContent, "extension") ?: return
             val base = extension.getAttribute("base").ifBlank { null }
-            val superType = base?.let { resolveTypeRef(it) }
+            val superType = base?.let { resolveTypeRef(it, extension) }
             val sequence = xsdChild(extension, "sequence") ?: xsdChild(extension, "all")
             val properties = mutableListOf<PropertyDefinition>()
             sequence?.let { seq ->
@@ -251,7 +366,7 @@ class XsdParser {
                     processSimpleType(inlineSimple, inlineName)
                     TypeRef.Named(toPascalCase(inlineName))
                 }
-                typeAttr != null -> resolveTypeRef(typeAttr)
+                typeAttr != null -> resolveTypeRef(typeAttr, el)
                 else -> TypeRef.Primitive(PrimitiveType.ANY)
             }
 
@@ -269,7 +384,7 @@ class XsdParser {
             val name = el.getAttribute("name")
             val use = el.getAttribute("use").ifBlank { "optional" }
             val typeAttr = el.getAttribute("type").ifBlank { null }
-            val typeRef = typeAttr?.let { resolveTypeRef(it) } ?: TypeRef.Primitive(PrimitiveType.STRING)
+            val typeRef = typeAttr?.let { resolveTypeRef(it, el) } ?: TypeRef.Primitive(PrimitiveType.STRING)
             return PropertyDefinition(
                 schemaName = name,
                 kotlinName = toCamelCase(name),
@@ -282,17 +397,29 @@ class XsdParser {
 
         // ── Type resolution ───────────────────────────────────────────────────
 
-        private fun resolveTypeRef(qname: String): TypeRef {
+        /**
+         * Resolves a QName in the scope of [context] (prefix bindings can be declared on
+         * any ancestor element). Same-namespace references stay package-local; references
+         * into other namespaces become cross-package [TypeRef.Named].
+         */
+        private fun resolveTypeRef(qname: String, context: Element): TypeRef {
             if (qname.isBlank()) return TypeRef.Primitive(PrimitiveType.ANY)
             val colonIdx = qname.indexOf(':')
             val prefix = if (colonIdx >= 0) qname.substring(0, colonIdx) else null
             val localName = if (colonIdx >= 0) qname.substring(colonIdx + 1) else qname
-            val nsUri = prefix?.let { schemaRoot.lookupNamespaceURI(it) }
-                ?: schemaRoot.lookupNamespaceURI(null)
+            val nsUri = context.lookupNamespaceURI(prefix)
             if (nsUri == XSD_NS) {
                 builtinToPrimitive(localName)?.let { return TypeRef.Primitive(it) }
             }
-            return TypeRef.Named(toPascalCase(localName))
+            val kotlinName = toPascalCase(localName)
+            return if (nsUri == null || nsUri == targetNamespace) {
+                TypeRef.Named(kotlinName)
+            } else {
+                TypeRef.Named(
+                    name = kotlinName,
+                    packageName = packagesByNamespace[nsUri] ?: fallbackMapper.toPackage(nsUri),
+                )
+            }
         }
 
         private fun resolveBuiltinType(qname: String): PrimitiveType? =
@@ -346,23 +473,6 @@ class XsdParser {
             return null
         }
 
-        // ── DOM helpers ───────────────────────────────────────────────────────
-
-        private fun xsdChildren(parent: Element, localName: String): List<Element> {
-            val result = mutableListOf<Element>()
-            val children = parent.childNodes
-            for (i in 0 until children.length) {
-                val node = children.item(i)
-                if (node is Element && node.localName == localName && node.namespaceURI == XSD_NS) {
-                    result.add(node)
-                }
-            }
-            return result
-        }
-
-        private fun xsdChild(parent: Element, localName: String): Element? =
-            xsdChildren(parent, localName).firstOrNull()
-
         // ── Name sanitization ─────────────────────────────────────────────────
 
         private fun sanitizeEnumConstantName(name: String): String {
@@ -414,3 +524,20 @@ class XsdParser {
         }
     }
 }
+
+// ── DOM helpers (shared by loader and parse contexts) ────────────────────────
+
+private fun xsdChildren(parent: Element, localName: String): List<Element> {
+    val result = mutableListOf<Element>()
+    val children = parent.childNodes
+    for (i in 0 until children.length) {
+        val node = children.item(i)
+        if (node is Element && node.localName == localName && node.namespaceURI == XSD_NS) {
+            result.add(node)
+        }
+    }
+    return result
+}
+
+private fun xsdChild(parent: Element, localName: String): Element? =
+    xsdChildren(parent, localName).firstOrNull()

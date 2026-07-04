@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Chameleon document: no targetNamespace; adopts the includer's namespace.
+     Also imports money.xsd a second time (exercises the parse-once cache). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:m="urn:test:money">
+
+  <xs:import namespace="urn:test:money" schemaLocation="money.xsd"/>
+
+  <xs:complexType name="ItemType">
+    <xs:sequence>
+      <xs:element name="sku" type="xs:string"/>
+      <xs:element name="price" type="m:MoneyType"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Imports a file that does not exist: parsing must not throw, and references
+     into the missing namespace must still get a stable derived package. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:x="urn:test:missing"
+           targetNamespace="urn:test:broken">
+
+  <xs:import namespace="urn:test:missing" schemaLocation="missing.xsd"/>
+
+  <xs:complexType name="BrokenType">
+    <xs:sequence>
+      <xs:element name="ghost" type="x:GhostType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

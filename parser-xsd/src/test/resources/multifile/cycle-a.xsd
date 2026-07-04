@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Circular import pair: a imports b, b imports a. Legal XSD; must terminate. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:b="urn:test:cycle-b"
+           targetNamespace="urn:test:cycle-a">
+
+  <xs:import namespace="urn:test:cycle-b" schemaLocation="cycle-b.xsd"/>
+
+  <xs:complexType name="AType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="partner" type="b:BType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

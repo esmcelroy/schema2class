@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:a="urn:test:cycle-a"
+           targetNamespace="urn:test:cycle-b">
+
+  <xs:import namespace="urn:test:cycle-a" schemaLocation="cycle-a.xsd"/>
+
+  <xs:complexType name="BType">
+    <xs:sequence>
+      <xs:element name="owner" type="a:AType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>
