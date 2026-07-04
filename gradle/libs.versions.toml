@@ -7,6 +7,7 @@ junit = "5.11.3"
 kotest = "5.9.1"
 kotlin-compile-testing = "1.6.0"
 kotlinx-serialization = "1.6.3"
+xmlutil = "0.86.3"
 
 [libraries]
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -20,6 +21,7 @@ kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref =
 kotlin-compile-testing = { module = "com.github.tschuchortdev:kotlin-compile-testing", version.ref = "kotlin-compile-testing" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlin-serialization-compiler-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable", version.ref = "kotlin" }
+xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm", version.ref = "xmlutil" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

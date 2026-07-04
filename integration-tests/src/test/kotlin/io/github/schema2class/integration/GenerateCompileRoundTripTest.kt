@@ -12,11 +12,13 @@ import io.github.schema2class.parser.jsonschema.JsonSchemaParser
 import io.github.schema2class.parser.xsd.XsdParser
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
+import nl.adaptivity.xmlutil.serialization.XML
 import org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationComponentRegistrar
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -204,5 +206,38 @@ class GenerateCompileRoundTripTest {
         // Encode → decode → equality
         val encoded = json.encodeToString(payloadSerializer, payload)
         json.decodeFromString(payloadSerializer, encoded) shouldBe payload
+    }
+
+    // ── XSD: xmlutil mode round-trips an actual XML document ─────────────────
+
+    @Test
+    fun `xmlutil mode round-trips an xml document with attributes and text content`() {
+        val model = XsdParser().parse(fixtureFile("business-doc.xsd"), "com.example.xml")
+        val xmlCodegen = KotlinCodegen(
+            KotlinCodegen.Options(annotationMode = AnnotationMode.XMLUTIL),
+        )
+        val result = compile(xmlCodegen.generate(model), withSerializationPlugin = true)
+
+        // TextType is the UNECE simpleContent pattern: string body + attribute.
+        // (A @Contextual content property like AmountType's BigDecimal is not yet
+        // honored as @XmlValue by xmlutil — tracked separately.)
+        val textClass = result.classLoader.loadClass("com.example.xml.TextType")
+        val xml = XML()
+        val textSerializer = serializer(textClass)
+
+        val document =
+            """<TextType xmlns="urn:test:business-doc" languageID="en">Payment overdue</TextType>"""
+        val text = xml.decodeFromString(textSerializer, document).shouldNotBeNull()
+
+        // @XmlValue content property and @XmlElement(false) attribute both mapped
+        textClass.getMethod("getValue").invoke(text) shouldBe "Payment overdue"
+        textClass.getMethod("getLanguageId").invoke(text) shouldBe "en"
+
+        // Encode: languageID must come out as an XML attribute, value as text content
+        val encoded = xml.encodeToString(textSerializer, text)
+        encoded shouldContain "languageID=\"en\""
+        encoded shouldContain ">Payment overdue<"
+
+        xml.decodeFromString(textSerializer, encoded) shouldBe text
     }
 }

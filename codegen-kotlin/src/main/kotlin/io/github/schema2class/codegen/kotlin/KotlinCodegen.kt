@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
 import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.PropertyDefinition
+import io.github.schema2class.core.ir.PropertyKind
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
@@ -33,6 +34,14 @@ enum class AnnotationMode {
      * consumers register those via a serializersModule.
      */
     KOTLINX_SERIALIZATION,
+
+    /**
+     * Everything [KOTLINX_SERIALIZATION] emits, plus pdvrieze/xmlutil annotations
+     * so XSD-sourced models round-trip XML: @XmlSerialName (type name + target
+     * namespace) on types, @XmlElement(true/false) for element vs attribute
+     * properties, and @XmlValue on the xs:simpleContent content property.
+     */
+    XMLUTIL,
 }
 
 class KotlinCodegen(private val options: Options = Options()) {
@@ -42,7 +51,10 @@ class KotlinCodegen(private val options: Options = Options()) {
     )
 
     private val annotate: Boolean
-        get() = options.annotationMode == AnnotationMode.KOTLINX_SERIALIZATION
+        get() = options.annotationMode != AnnotationMode.NONE
+
+    private val xmlMode: Boolean
+        get() = options.annotationMode == AnnotationMode.XMLUTIL
 
     /**
      * Generates Kotlin source for every type in the model.
@@ -52,30 +64,34 @@ class KotlinCodegen(private val options: Options = Options()) {
     fun generate(model: SchemaModel): Map<String, String> {
         val result = mutableMapOf<String, String>()
         for (type in model.types) {
-            val source = generateSource(type, model.packageName)
+            val source = generateSource(type, model.packageName, model.namespace)
             val relativePath = model.packageName.replace('.', '/') + "/" + type.kotlinName + ".kt"
             result[relativePath] = source
         }
         return result
     }
 
-    private fun generateSource(type: TypeDefinition, packageName: String): String {
+    private fun generateSource(type: TypeDefinition, packageName: String, namespace: String?): String {
         val fileBuilder = FileSpec.builder(packageName, type.kotlinName)
         when (type) {
-            is TypeDefinition.ComplexType -> fileBuilder.addType(generateComplexType(type, packageName))
+            is TypeDefinition.ComplexType -> fileBuilder.addType(generateComplexType(type, packageName, namespace))
             is TypeDefinition.EnumType -> {
-                val (typeSpec, commentMap) = generateEnumType(type, packageName)
+                val (typeSpec, commentMap) = generateEnumType(type, namespace)
                 fileBuilder.addType(typeSpec)
                 val raw = fileBuilder.build().toString()
                 return applyEnumComments(raw, commentMap)
             }
-            is TypeDefinition.UnionType -> fileBuilder.addType(generateUnionType(type, packageName))
+            is TypeDefinition.UnionType -> fileBuilder.addType(generateUnionType(type, packageName, namespace))
             is TypeDefinition.AliasType -> fileBuilder.addTypeAlias(generateAliasType(type, packageName))
         }
         return fileBuilder.build().toString()
     }
 
-    private fun generateComplexType(type: TypeDefinition.ComplexType, packageName: String): TypeSpec {
+    private fun generateComplexType(
+        type: TypeDefinition.ComplexType,
+        packageName: String,
+        namespace: String?,
+    ): TypeSpec {
         val allProps = listOfNotNull(type.contentProperty) + type.properties
 
         val constructorBuilder = FunSpec.constructorBuilder()
@@ -85,7 +101,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         if (allProps.isNotEmpty()) {
             typeBuilder.addModifiers(KModifier.DATA)
         }
-        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName)
+        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName, namespace)
 
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
@@ -112,6 +128,9 @@ class KotlinCodegen(private val options: Options = Options()) {
             if (annotate && prop.schemaName != prop.kotlinName) {
                 propBuilder.addAnnotation(serialNameAnnotation(prop.schemaName))
             }
+            if (xmlMode) {
+                propBuilder.addAnnotation(kindAnnotation(prop.kind))
+            }
             prop.documentation?.let { propBuilder.addKdoc("%L", it) }
             typeBuilder.addProperty(propBuilder.build())
         }
@@ -128,10 +147,10 @@ class KotlinCodegen(private val options: Options = Options()) {
      */
     private fun generateEnumType(
         type: TypeDefinition.EnumType,
-        @Suppress("UNUSED_PARAMETER") packageName: String,
+        namespace: String?,
     ): Pair<TypeSpec, Map<String, String>> {
         val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
-        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName)
+        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName, namespace)
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
         val commentMap = mutableMapOf<String, String>()
@@ -176,11 +195,15 @@ class KotlinCodegen(private val options: Options = Options()) {
         return lines.joinToString("\n")
     }
 
-    private fun generateUnionType(type: TypeDefinition.UnionType, packageName: String): TypeSpec {
+    private fun generateUnionType(
+        type: TypeDefinition.UnionType,
+        packageName: String,
+        namespace: String?,
+    ): TypeSpec {
         val sealedClassName = ClassName(packageName, type.kotlinName)
         val sealedBuilder = TypeSpec.classBuilder(type.kotlinName)
             .addModifiers(KModifier.SEALED)
-        addTypeAnnotations(sealedBuilder, type.schemaName, type.kotlinName)
+        addTypeAnnotations(sealedBuilder, type.schemaName, type.kotlinName, namespace)
 
         type.documentation?.let { sealedBuilder.addKdoc("%L", it) }
 
@@ -217,16 +240,35 @@ class KotlinCodegen(private val options: Options = Options()) {
 
     // ── Annotation helpers ────────────────────────────────────────────────────
 
-    private fun addTypeAnnotations(builder: TypeSpec.Builder, schemaName: String, kotlinName: String) {
+    private fun addTypeAnnotations(
+        builder: TypeSpec.Builder,
+        schemaName: String,
+        kotlinName: String,
+        namespace: String?,
+    ) {
         if (!annotate) return
         builder.addAnnotation(SERIALIZABLE)
         if (schemaName != kotlinName) {
             builder.addAnnotation(serialNameAnnotation(schemaName))
         }
+        if (xmlMode) {
+            val xmlName = AnnotationSpec.builder(XML_SERIAL_NAME)
+                .addMember("value = %S", schemaName)
+            if (namespace != null) {
+                xmlName.addMember("namespace = %S", namespace)
+            }
+            builder.addAnnotation(xmlName.build())
+        }
     }
 
     private fun serialNameAnnotation(wireName: String): AnnotationSpec =
         AnnotationSpec.builder(SERIAL_NAME).addMember("%S", wireName).build()
+
+    private fun kindAnnotation(kind: PropertyKind): AnnotationSpec = when (kind) {
+        PropertyKind.ELEMENT -> AnnotationSpec.builder(XML_ELEMENT).addMember("%L", true).build()
+        PropertyKind.ATTRIBUTE -> AnnotationSpec.builder(XML_ELEMENT).addMember("%L", false).build()
+        PropertyKind.CONTENT -> AnnotationSpec.builder(XML_VALUE).build()
+    }
 
     private fun propertyTypeName(prop: PropertyDefinition, packageName: String): TypeName =
         prop.type.toKotlinTypeName(packageName).withContextualIfNeeded(prop.type)
@@ -290,5 +332,8 @@ class KotlinCodegen(private val options: Options = Options()) {
         val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
         val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
+        val XML_SERIAL_NAME = ClassName("nl.adaptivity.xmlutil.serialization", "XmlSerialName")
+        val XML_ELEMENT = ClassName("nl.adaptivity.xmlutil.serialization", "XmlElement")
+        val XML_VALUE = ClassName("nl.adaptivity.xmlutil.serialization", "XmlValue")
     }
 }

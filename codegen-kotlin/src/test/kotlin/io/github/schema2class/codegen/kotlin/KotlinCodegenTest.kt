@@ -526,6 +526,81 @@ class KotlinCodegenTest {
         source.split("@Serializable").size shouldBe 4
     }
 
+    // -----------------------------------------------------------------------
+    // 12. xmlutil annotation mode
+    // -----------------------------------------------------------------------
+    @Test
+    fun `xmlutil mode annotates kinds and type xml name with namespace`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "AmountType",
+            kotlinName = "AmountType",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currencyID",
+                    kotlinName = "currencyId",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    kind = io.github.schema2class.core.ir.PropertyKind.ATTRIBUTE,
+                ),
+            ),
+            contentProperty = PropertyDefinition(
+                schemaName = "value",
+                kotlinName = "value",
+                type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+                nullable = false,
+                defaultValue = null,
+                documentation = null,
+                kind = io.github.schema2class.core.ir.PropertyKind.CONTENT,
+            ),
+        )
+        val xmlCodegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.XMLUTIL))
+        val xmlModel = SchemaModel(
+            namespace = "urn:test:business-doc",
+            packageName = pkg,
+            types = listOf(type),
+            sourceFormat = SourceFormat.XSD,
+        )
+
+        val source = sourceFor(xmlCodegen.generate(xmlModel), "AmountType")
+
+        // kotlinx annotations still present (XMLUTIL is a superset)
+        source shouldContain "@Serializable"
+        source shouldContain "@SerialName(\"currencyID\")"
+        // xmlutil additions
+        source shouldContain "@XmlSerialName("
+        source shouldContain "value = \"AmountType\""
+        source shouldContain "namespace = \"urn:test:business-doc\""
+        source shouldContain "@XmlValue"
+        source shouldContain "@XmlElement(false)"
+    }
+
+    @Test
+    fun `xmlutil mode marks element-kind properties as XmlElement true`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Order",
+            kotlinName = "Order",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "item",
+                    kotlinName = "item",
+                    type = TypeRef.ListOf(TypeRef.Named("Item")),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val xmlCodegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.XMLUTIL))
+
+        val source = sourceFor(xmlCodegen.generate(model(type)), "Order")
+
+        source shouldContain "@XmlElement(true)"
+    }
+
     @Test
     fun `default mode emits no serialization annotations`() {
         val type = TypeDefinition.ComplexType(

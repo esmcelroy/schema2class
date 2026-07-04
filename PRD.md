@@ -195,7 +195,8 @@ enum class Color { RED, GREEN, BLUE }
 - [ ] Source set wiring (generated sources added to compile classpath)
 
 ### Phase 5 — Quality & Ecosystem
-- [ ] Annotation modes: kotlinx.serialization, Jackson, none
+- [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML) — Jackson
+      remains (`schema2class-n0g`)
 - [ ] Dokka API docs
 - [x] Integration tests (generate → compile with real kotlinc → instantiate →
       JSON document round-trip via Jackson; XML document round-trips arrive
