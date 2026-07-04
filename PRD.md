@@ -177,7 +177,7 @@ enum class Color { RED, GREEN, BLUE }
       use=required → non-null)
 - [ ] `xs:choice` → UnionType (`schema2class-eq1`)
 - [x] Namespace → package mapping (`NamespacePackageMapper`, see `docs/namespace-mapping.md`)
-- [ ] `xs:import` / `xs:include` multi-file resolution (`schema2class-y7w`)
+- [x] `xs:import` / `xs:include` multi-file resolution (`parseWithImports`, one model per namespace)
 
 ### Phase 3 — Advanced Type Mapping
 - [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)
