@@ -122,6 +122,7 @@ class XsdParserTest {
         val street = type.properties.find { it.schemaName == "street" }.shouldNotBeNull()
         street.type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
         street.nullable shouldBe false
+        street.kind shouldBe io.github.schema2class.core.ir.PropertyKind.ELEMENT
 
         val postCode = type.properties.find { it.schemaName == "postCode" }.shouldNotBeNull()
         postCode.nullable shouldBe true
@@ -165,7 +166,9 @@ class XsdParserTest {
         )
         val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
             .find { it.schemaName == "Tagged" }.shouldNotBeNull()
-        type.properties.find { it.schemaName == "id" }.shouldNotBeNull().nullable shouldBe false
+        val id = type.properties.find { it.schemaName == "id" }.shouldNotBeNull()
+        id.nullable shouldBe false
+        id.kind shouldBe io.github.schema2class.core.ir.PropertyKind.ATTRIBUTE
         type.properties.find { it.schemaName == "lang" }.shouldNotBeNull().nullable shouldBe true
     }
 
@@ -192,8 +195,11 @@ class XsdParserTest {
         val content = type.contentProperty.shouldNotBeNull()
         content.type shouldBe TypeRef.Primitive(PrimitiveType.DECIMAL)
         content.nullable shouldBe false
+        content.kind shouldBe io.github.schema2class.core.ir.PropertyKind.CONTENT
 
-        type.properties.find { it.schemaName == "currencyID" }.shouldNotBeNull().nullable shouldBe true
+        val currency = type.properties.find { it.schemaName == "currencyID" }.shouldNotBeNull()
+        currency.nullable shouldBe true
+        currency.kind shouldBe io.github.schema2class.core.ir.PropertyKind.ATTRIBUTE
     }
 
     // ── Test 9: simpleType restriction without enum → AliasType ──────────────

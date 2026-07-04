@@ -17,7 +17,24 @@ data class PropertyDefinition(
     val defaultValue: String?,
     val documentation: String?,
     val constraints: List<Constraint> = emptyList(),
+    val kind: PropertyKind = PropertyKind.ELEMENT,
 )
+
+/**
+ * How a property is carried on the wire — the distinction XML serialization
+ * annotations need (@XmlElement vs attribute vs @XmlValue). JSON Schema
+ * properties are always [ELEMENT].
+ */
+enum class PropertyKind {
+    /** An xs:element child or a JSON object member. */
+    ELEMENT,
+
+    /** An xs:attribute. */
+    ATTRIBUTE,
+
+    /** The typed text body of an xs:simpleContent type ([TypeDefinition.ComplexType.contentProperty]). */
+    CONTENT,
+}
 
 /** Validation constraints carried from the schema into the IR. */
 sealed class Constraint {

@@ -4,6 +4,7 @@ import io.github.schema2class.core.ir.Constraint
 import io.github.schema2class.core.ir.EnumValue
 import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.PropertyDefinition
+import io.github.schema2class.core.ir.PropertyKind
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
@@ -296,6 +297,7 @@ class XsdParser {
                 nullable = false,
                 defaultValue = null,
                 documentation = null,
+                kind = PropertyKind.CONTENT,
             )
             val attributes = xsdChildren(extension, "attribute").map { buildAttributeProperty(it) }
             types += TypeDefinition.ComplexType(
@@ -392,6 +394,7 @@ class XsdParser {
                 nullable = use != "required",
                 defaultValue = null,
                 documentation = extractTypeDoc(el),
+                kind = PropertyKind.ATTRIBUTE,
             )
         }
 
