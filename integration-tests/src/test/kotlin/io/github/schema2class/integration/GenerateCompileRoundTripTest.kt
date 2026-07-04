@@ -5,10 +5,14 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
+import io.github.schema2class.codegen.kotlin.AnnotationMode
 import io.github.schema2class.codegen.kotlin.KotlinCodegen
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.parser.jsonschema.JsonSchemaParser
 import io.github.schema2class.parser.xsd.XsdParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
+import org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationComponentRegistrar
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -34,7 +38,10 @@ class GenerateCompileRoundTripTest {
     private fun fixtureFile(name: String): File =
         File(javaClass.getResource("/$name").shouldNotBeNull().toURI())
 
-    private fun compile(sourcesByPath: Map<String, String>): KotlinCompilation.Result {
+    private fun compile(
+        sourcesByPath: Map<String, String>,
+        withSerializationPlugin: Boolean = false,
+    ): KotlinCompilation.Result {
         val compilation = KotlinCompilation().apply {
             sources = sourcesByPath.map { (path, content) ->
                 SourceFile.kotlin(path.substringAfterLast('/'), content)
@@ -42,6 +49,9 @@ class GenerateCompileRoundTripTest {
             inheritClassPath = true
             verbose = false
             messageOutputStream = java.io.ByteArrayOutputStream()
+            if (withSerializationPlugin) {
+                compilerPluginRegistrars = listOf(SerializationComponentRegistrar())
+            }
         }
         val result = compilation.compile()
         result.exitCode shouldBe KotlinCompilation.ExitCode.OK
@@ -148,5 +158,51 @@ class GenerateCompileRoundTripTest {
         val serialized = mapper.writeValueAsString(payload)
         val reparsed = mapper.readValue(serialized, payloadClass)
         reparsed shouldBe payload
+    }
+
+    // ── JSON Schema: kotlinx.serialization mode with the real compiler plugin ─
+
+    @Test
+    fun `kotlinx annotation mode round-trips wire names jackson cannot map`() {
+        val model = JsonSchemaParser().parse(
+            fixtureFile("telemetry-payload.schema.json"),
+            "com.example.kx",
+        )
+        val kotlinxCodegen = KotlinCodegen(
+            KotlinCodegen.Options(annotationMode = AnnotationMode.KOTLINX_SERIALIZATION),
+        )
+        val result = compile(kotlinxCodegen.generate(model), withSerializationPlugin = true)
+        val payloadClass = result.classLoader.loadClass("com.example.kx.TelemetryPayload")
+
+        // The generated companion serializer is discovered reflectively across classloaders
+        val payloadSerializer = serializer(payloadClass)
+        val json = Json
+
+        val document = """
+            {
+              "deviceId": "dev-42",
+              "recordedAt": "2026-07-04T12:00:00Z",
+              "firmware-version": "2.3.1",
+              "status": "degraded",
+              "readings": [
+                { "sensor": "temp", "value": 21.5 }
+              ]
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString(payloadSerializer, document).shouldNotBeNull()
+
+        // @SerialName("firmware-version") maps the hyphenated wire name — the case
+        // the reflection-based Jackson test had to leave out
+        payloadClass.getMethod("getFirmwareVersion").invoke(payload) shouldBe "2.3.1"
+        // @SerialName("degraded") on the enum constant maps the exact wire value
+        payloadClass.getMethod("getStatus").invoke(payload).toString() shouldBe "DEGRADED"
+        // Kotlin default applied for the omitted "unit" field
+        val readings = payloadClass.getMethod("getReadings").invoke(payload) as List<*>
+        readings[0]!!.javaClass.getMethod("getUnit").invoke(readings[0]) shouldBe "celsius"
+
+        // Encode → decode → equality
+        val encoded = json.encodeToString(payloadSerializer, payload)
+        json.decodeFromString(payloadSerializer, encoded) shouldBe payload
     }
 }

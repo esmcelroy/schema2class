@@ -8,6 +8,7 @@ import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
 import io.github.schema2class.core.ir.UnionVariant
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
@@ -408,6 +409,146 @@ class KotlinCodegenTest {
         source shouldContain "class Placeholder"
         source shouldNotContain "data class"
         source shouldNotContain "Placeholder()"
+    }
+
+    // -----------------------------------------------------------------------
+    // 11. kotlinx.serialization annotation mode
+    // -----------------------------------------------------------------------
+    private val kotlinxCodegen =
+        KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.KOTLINX_SERIALIZATION))
+
+    @Test
+    fun `kotlinx mode annotates data class and renamed properties`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "work-flow",
+            kotlinName = "WorkFlow",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "cancel-in-progress",
+                    kotlinName = "cancelInProgress",
+                    type = TypeRef.Primitive(PrimitiveType.BOOLEAN),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "name",
+                    kotlinName = "name",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "WorkFlow")
+
+        source shouldContain "@Serializable"
+        source shouldContain "@SerialName(\"work-flow\")"
+        source shouldContain "@SerialName(\"cancel-in-progress\")"
+        // Names that already match need no @SerialName
+        source shouldNotContain "@SerialName(\"name\")"
+        source shouldContain "import kotlinx.serialization.Serializable"
+    }
+
+    @Test
+    fun `kotlinx mode adds Contextual to java math and time types`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Price",
+            kotlinName = "Price",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "amount",
+                    kotlinName = "amount",
+                    type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "history",
+                    kotlinName = "history",
+                    type = TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.DATE)),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "Price")
+
+        source shouldContain "@Contextual"
+        source shouldContain "BigDecimal"
+        // List element type is annotated, not the list itself
+        source shouldContain "List<@Contextual LocalDate>"
+    }
+
+    @Test
+    fun `kotlinx mode annotates enum constants with differing serialized values`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "ActionCode",
+            kotlinName = "ActionCode",
+            documentation = null,
+            values = listOf(
+                EnumValue(serializedValue = "1", kotlinName = "ADDED", documentation = null),
+                EnumValue(serializedValue = "ACTIVE", kotlinName = "ACTIVE", documentation = null),
+            ),
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "ActionCode")
+
+        source shouldContain "@Serializable"
+        source shouldContain "@SerialName(\"1\")"
+        source shouldContain "ADDED"
+        // Matching constant stays unannotated
+        source shouldNotContain "@SerialName(\"ACTIVE\")"
+    }
+
+    @Test
+    fun `kotlinx mode annotates sealed class and variants`() {
+        val type = TypeDefinition.UnionType(
+            schemaName = "Threshold",
+            kotlinName = "Threshold",
+            documentation = null,
+            variants = listOf(
+                UnionVariant(kotlinName = "DoubleVariant", type = TypeRef.Primitive(PrimitiveType.DOUBLE)),
+                UnionVariant(kotlinName = "StringVariant", type = TypeRef.Primitive(PrimitiveType.STRING)),
+            ),
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "Threshold")
+
+        // Sealed parent and both variants annotated
+        source.split("@Serializable").size shouldBe 4
+    }
+
+    @Test
+    fun `default mode emits no serialization annotations`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "plain-type",
+            kotlinName = "PlainType",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "amount",
+                    kotlinName = "amount",
+                    type = TypeRef.Primitive(PrimitiveType.DECIMAL),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val source = sourceFor(generate(type), "PlainType")
+
+        source shouldNotContain "@Serializable"
+        source shouldNotContain "@SerialName"
+        source shouldNotContain "@Contextual"
     }
 
     // -----------------------------------------------------------------------

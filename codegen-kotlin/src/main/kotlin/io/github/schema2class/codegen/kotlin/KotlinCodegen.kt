@@ -1,5 +1,6 @@
 package io.github.schema2class.codegen.kotlin
 
+import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -14,11 +15,34 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
 import io.github.schema2class.core.ir.PrimitiveType
+import io.github.schema2class.core.ir.PropertyDefinition
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
 
-class KotlinCodegen {
+/** Which serialization annotations the generated source carries. */
+enum class AnnotationMode {
+    /** Plain data classes, no annotations. */
+    NONE,
+
+    /**
+     * kotlinx.serialization: @Serializable on classes/enums/sealed hierarchies,
+     * @SerialName where the wire name differs from the Kotlin name, and
+     * @Contextual on java.math/java.time property types (BigDecimal, LocalDate,
+     * OffsetDateTime, Duration), which have no built-in kotlinx serializers —
+     * consumers register those via a serializersModule.
+     */
+    KOTLINX_SERIALIZATION,
+}
+
+class KotlinCodegen(private val options: Options = Options()) {
+
+    data class Options(
+        val annotationMode: AnnotationMode = AnnotationMode.NONE,
+    )
+
+    private val annotate: Boolean
+        get() = options.annotationMode == AnnotationMode.KOTLINX_SERIALIZATION
 
     /**
      * Generates Kotlin source for every type in the model.
@@ -61,6 +85,7 @@ class KotlinCodegen {
         if (allProps.isNotEmpty()) {
             typeBuilder.addModifiers(KModifier.DATA)
         }
+        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName)
 
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
@@ -70,7 +95,7 @@ class KotlinCodegen {
         }
 
         for (prop in allProps) {
-            val typeName = prop.type.toKotlinTypeName(packageName)
+            val typeName = propertyTypeName(prop, packageName)
             val resolvedTypeName = if (prop.nullable) typeName.copy(nullable = true) else typeName
 
             val paramBuilder = ParameterSpec.builder(prop.kotlinName, resolvedTypeName)
@@ -84,6 +109,9 @@ class KotlinCodegen {
 
             val propBuilder = PropertySpec.builder(prop.kotlinName, resolvedTypeName)
                 .initializer(prop.kotlinName)
+            if (annotate && prop.schemaName != prop.kotlinName) {
+                propBuilder.addAnnotation(serialNameAnnotation(prop.schemaName))
+            }
             prop.documentation?.let { propBuilder.addKdoc("%L", it) }
             typeBuilder.addProperty(propBuilder.build())
         }
@@ -103,12 +131,22 @@ class KotlinCodegen {
         @Suppress("UNUSED_PARAMETER") packageName: String,
     ): Pair<TypeSpec, Map<String, String>> {
         val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
+        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName)
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
         val commentMap = mutableMapOf<String, String>()
 
         for (value in type.values) {
-            typeBuilder.addEnumConstant(value.kotlinName)
+            if (annotate && value.serializedValue != value.kotlinName) {
+                typeBuilder.addEnumConstant(
+                    value.kotlinName,
+                    TypeSpec.anonymousClassBuilder()
+                        .addAnnotation(serialNameAnnotation(value.serializedValue))
+                        .build(),
+                )
+            } else {
+                typeBuilder.addEnumConstant(value.kotlinName)
+            }
             if (value.serializedValue != value.kotlinName) {
                 commentMap[value.kotlinName] = value.serializedValue
             }
@@ -142,11 +180,12 @@ class KotlinCodegen {
         val sealedClassName = ClassName(packageName, type.kotlinName)
         val sealedBuilder = TypeSpec.classBuilder(type.kotlinName)
             .addModifiers(KModifier.SEALED)
+        addTypeAnnotations(sealedBuilder, type.schemaName, type.kotlinName)
 
         type.documentation?.let { sealedBuilder.addKdoc("%L", it) }
 
         for (variant in type.variants) {
-            val variantTypeName = variant.type.toKotlinTypeName(packageName)
+            val variantTypeName = variant.type.toKotlinTypeName(packageName).withContextualIfNeeded(variant.type)
             val paramSpec = ParameterSpec.builder("value", variantTypeName).build()
             val propSpec = PropertySpec.builder("value", variantTypeName)
                 .initializer("value")
@@ -160,6 +199,7 @@ class KotlinCodegen {
                 .primaryConstructor(variantConstructor)
                 .addProperty(propSpec)
                 .superclass(sealedClassName)
+                .apply { if (annotate) addAnnotation(SERIALIZABLE) }
                 .build()
 
             sealedBuilder.addType(variantClass)
@@ -174,6 +214,52 @@ class KotlinCodegen {
         type.documentation?.let { builder.addKdoc("%L", it) }
         return builder.build()
     }
+
+    // ── Annotation helpers ────────────────────────────────────────────────────
+
+    private fun addTypeAnnotations(builder: TypeSpec.Builder, schemaName: String, kotlinName: String) {
+        if (!annotate) return
+        builder.addAnnotation(SERIALIZABLE)
+        if (schemaName != kotlinName) {
+            builder.addAnnotation(serialNameAnnotation(schemaName))
+        }
+    }
+
+    private fun serialNameAnnotation(wireName: String): AnnotationSpec =
+        AnnotationSpec.builder(SERIAL_NAME).addMember("%S", wireName).build()
+
+    private fun propertyTypeName(prop: PropertyDefinition, packageName: String): TypeName =
+        prop.type.toKotlinTypeName(packageName).withContextualIfNeeded(prop.type)
+
+    /**
+     * Attaches @Contextual to java.math/java.time types (or the element type of a list
+     * of them) — kotlinx.serialization has no built-in serializers for those.
+     */
+    private fun TypeName.withContextualIfNeeded(ref: TypeRef): TypeName {
+        if (!annotate) return this
+        return when (ref) {
+            is TypeRef.Primitive ->
+                if (ref.type.needsContextual) copy(annotations = annotations + contextualAnnotation()) else this
+            is TypeRef.ListOf -> {
+                if (this !is com.squareup.kotlinpoet.ParameterizedTypeName) return this
+                val element = typeArguments.single().withContextualIfNeeded(ref.element)
+                rawType.parameterizedBy(element)
+            }
+            is TypeRef.Named -> this
+        }
+    }
+
+    private val PrimitiveType.needsContextual: Boolean
+        get() = when (this) {
+            PrimitiveType.DECIMAL, PrimitiveType.DATE,
+            PrimitiveType.DATE_TIME, PrimitiveType.DURATION,
+            -> true
+            else -> false
+        }
+
+    private fun contextualAnnotation(): AnnotationSpec = AnnotationSpec.builder(CONTEXTUAL).build()
+
+    // ── Type name resolution ──────────────────────────────────────────────────
 
     private fun TypeRef.toKotlinTypeName(currentPackage: String): TypeName = when (this) {
         is TypeRef.Primitive -> primitiveToTypeName(type)
@@ -198,5 +284,11 @@ class KotlinCodegen {
         PrimitiveType.BYTES -> ByteArray::class.asClassName()
         PrimitiveType.URI -> String::class.asClassName()
         PrimitiveType.ANY -> Any::class.asClassName()
+    }
+
+    private companion object {
+        val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
+        val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
+        val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
     }
 }

@@ -8,6 +8,8 @@ dependencies {
     testImplementation(libs.kotlin.compile.testing)
     testImplementation(libs.jackson.databind)
     testImplementation(libs.jackson.kotlin)
+    testImplementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.kotlin.serialization.compiler.plugin)
 
     testImplementation(libs.junit.api)
     testImplementation(libs.kotest.assertions)
