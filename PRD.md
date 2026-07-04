@@ -167,8 +167,8 @@ enum class Color { RED, GREEN, BLUE }
 - [x] Core IR data model
 - [x] JSON Schema parser (draft-07 baseline; `allOf` follow-up tracked)
 - [x] Kotlin codegen for data classes, enums, sealed classes, typealiases
-- [ ] Unit test suite: schema → IR → Kotlin round-trip (parser and codegen each
-      have unit tests; the dedicated round-trip suite is `schema2class-7oe`)
+- [x] Unit test suites: schema → IR → Kotlin round-trip for both formats
+      (`XsdRoundTripTest`, `JsonSchemaRoundTripTest`; real-world fixtures vendored)
 
 ### Phase 2 — XSD Support
 - [x] XSD parser (complex types, simple types, enumerations, sequences,
