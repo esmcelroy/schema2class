@@ -192,7 +192,8 @@ enum class Color { RED, GREEN, BLUE }
 ### Phase 4 — Build Tooling
 - [x] Gradle plugin (`schema2classGenerate` task; mixed .xsd/.json specs with
       per-schema package + annotation mode — see `docs/mixed-format-projects.md`)
-- [ ] CLI (`schema2class generate --input schema.xsd --output src/`)
+- [x] CLI (`schema2class generate -i schema.xsd -i payload.json=com.pkg -o out/`;
+      mixed formats, per-input packages, namespace overrides, annotation modes)
 - [x] Source set wiring (generated dir added to the main Kotlin source set when
       the Kotlin JVM plugin is present)
 
