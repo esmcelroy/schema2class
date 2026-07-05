@@ -190,9 +190,11 @@ enum class Color { RED, GREEN, BLUE }
       attributes still open
 
 ### Phase 4 — Build Tooling
-- [ ] Gradle plugin (`schema2classGenerate` task)
+- [x] Gradle plugin (`schema2classGenerate` task; mixed .xsd/.json specs with
+      per-schema package + annotation mode — see `docs/mixed-format-projects.md`)
 - [ ] CLI (`schema2class generate --input schema.xsd --output src/`)
-- [ ] Source set wiring (generated sources added to compile classpath)
+- [x] Source set wiring (generated dir added to the main Kotlin source set when
+      the Kotlin JVM plugin is present)
 
 ### Phase 5 — Quality & Ecosystem
 - [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML) — Jackson

@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":codegen-kotlin"))
     implementation(libs.kotlin.stdlib)
 
+    testImplementation(gradleTestKit())
     testImplementation(libs.junit.api)
     testImplementation(libs.kotest.assertions)
     testRuntimeOnly(libs.junit.engine)
