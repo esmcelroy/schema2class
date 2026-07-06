@@ -175,7 +175,8 @@ enum class Color { RED, GREEN, BLUE }
       attributes, simpleContent, inline anonymous types)
 - [x] XSD-specific constraints (minOccurs/maxOccurs → List/nullable,
       use=required → non-null)
-- [ ] `xs:choice` → UnionType (`schema2class-eq1`)
+- [x] `xs:choice` → UnionType (whole-content choices; nested/attributed choices
+      flatten to nullable properties), `xs:group`/`xs:attributeGroup`, element refs
 - [x] Namespace → package mapping (`NamespacePackageMapper`, see `docs/namespace-mapping.md`)
 - [x] `xs:import` / `xs:include` multi-file resolution (`parseWithImports`, one model per namespace)
 
@@ -183,8 +184,9 @@ enum class Color { RED, GREEN, BLUE }
 - [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)
 - [x] `$ref` and `$defs` resolution — same-document and circular refs;
       external file refs still open (`schema2class-1so`)
-- [ ] `xs:extension` / `xs:restriction` inheritance mapping — basic
-      extension → superType done; full semantics are `schema2class-8kr`
+- [x] `xs:extension` / `xs:restriction` inheritance mapping — flattened by
+      `InheritanceFlattener` (data classes are final); restriction re-declares
+      kept content; cross-namespace chains resolved over the whole schema set
 - [ ] Value class generation for constrained simple types
 - [ ] Default value emission — JSON Schema `default` done; XSD `default`/`fixed`
       attributes still open
