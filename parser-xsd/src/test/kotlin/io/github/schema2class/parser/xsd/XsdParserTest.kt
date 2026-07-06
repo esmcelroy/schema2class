@@ -419,6 +419,54 @@ class XsdParserTest {
     }
 
     @Test
+    fun `whole-content choice maps to a UnionType with element-named variants`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="CardType">
+                <xs:sequence>
+                  <xs:element name="number" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+              <xs:complexType name="PaymentMethod">
+                <xs:choice>
+                  <xs:element name="iban" type="xs:string"/>
+                  <xs:element name="card" type="CardType"/>
+                </xs:choice>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val union = model.types.filterIsInstance<TypeDefinition.UnionType>()
+            .find { it.schemaName == "PaymentMethod" }.shouldNotBeNull()
+
+        union.variants.map { it.kotlinName } shouldBe listOf("IbanVariant", "CardVariant")
+        union.variants[0].type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        union.variants[1].type shouldBe TypeRef.Named("CardType")
+    }
+
+    @Test
+    fun `choice with attributes keeps the flattened nullable mapping`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Contact">
+                <xs:choice>
+                  <xs:element name="email" type="xs:string"/>
+                  <xs:element name="phone" type="xs:string"/>
+                </xs:choice>
+                <xs:attribute name="preferred" type="xs:boolean"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val contact = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Contact" }.shouldNotBeNull()
+        contact.properties.map { it.schemaName } shouldBe listOf("email", "phone", "preferred")
+        contact.properties[0].nullable shouldBe true
+    }
+
+    @Test
     fun `self-referencing group terminates`() {
         val model = parse(
             """

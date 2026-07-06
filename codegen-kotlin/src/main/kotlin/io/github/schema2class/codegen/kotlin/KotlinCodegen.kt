@@ -203,6 +203,20 @@ class KotlinCodegen(private val options: Options = Options()) {
         val sealedBuilder = TypeSpec.classBuilder(type.kotlinName)
             .addModifiers(KModifier.SEALED)
         addTypeAnnotations(sealedBuilder, type.schemaName, type.kotlinName, namespace)
+        val discriminator = type.discriminatorProperty
+        if (annotate && discriminator != null) {
+            // @JsonClassDiscriminator is experimental in kotlinx.serialization.json
+            sealedBuilder.addAnnotation(
+                AnnotationSpec.builder(OPT_IN)
+                    .addMember("%T::class", EXPERIMENTAL_SERIALIZATION_API)
+                    .build(),
+            )
+            sealedBuilder.addAnnotation(
+                AnnotationSpec.builder(JSON_CLASS_DISCRIMINATOR)
+                    .addMember("%S", discriminator)
+                    .build(),
+            )
+        }
 
         type.documentation?.let { sealedBuilder.addKdoc("%L", it) }
 
@@ -334,5 +348,10 @@ class KotlinCodegen(private val options: Options = Options()) {
         val XML_SERIAL_NAME = ClassName("nl.adaptivity.xmlutil.serialization", "XmlSerialName")
         val XML_ELEMENT = ClassName("nl.adaptivity.xmlutil.serialization", "XmlElement")
         val XML_VALUE = ClassName("nl.adaptivity.xmlutil.serialization", "XmlValue")
+        val OPT_IN = ClassName("kotlin", "OptIn")
+        val EXPERIMENTAL_SERIALIZATION_API =
+            ClassName("kotlinx.serialization", "ExperimentalSerializationApi")
+        val JSON_CLASS_DISCRIMINATOR =
+            ClassName("kotlinx.serialization.json", "JsonClassDiscriminator")
     }
 }

@@ -308,6 +308,32 @@ class JsonSchemaParserTest {
     }
 
     @Test
+    fun `discriminator propertyName is captured on union types`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Pet": {
+                  "oneOf": [
+                    { "${'$'}ref": "#/definitions/Cat" },
+                    { "${'$'}ref": "#/definitions/Dog" }
+                  ],
+                  "discriminator": { "propertyName": "petType" }
+                },
+                "Cat": { "type": "object", "properties": { "indoor": { "type": "boolean" } } },
+                "Dog": { "type": "object", "properties": { "breed": { "type": "string" } } }
+              }
+            }
+            """
+        )
+        val union = model.types
+            .filterIsInstance<TypeDefinition.UnionType>()
+            .find { it.schemaName == "Pet" }
+            .shouldNotBeNull()
+        union.discriminatorProperty shouldBe "petType"
+    }
+
+    @Test
     fun `defs keyword works same as definitions`() {
         val model = parse(
             """

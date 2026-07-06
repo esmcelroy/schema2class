@@ -44,12 +44,15 @@ sealed class TypeDefinition {
      * A union of two or more types (JSON Schema oneOf/anyOf, XSD xs:choice).
      * Maps to a Kotlin sealed class where each [UnionVariant] becomes a data class subtype
      * wrapping a single value of the variant's type.
+     * [discriminatorProperty] carries the OpenAPI-style discriminator propertyName when
+     * present, for serialization annotation modes (@JsonClassDiscriminator).
      */
     data class UnionType(
         override val schemaName: String,
         override val kotlinName: String,
         override val documentation: String?,
         val variants: List<UnionVariant>,
+        val discriminatorProperty: String? = null,
     ) : TypeDefinition()
 
     /**

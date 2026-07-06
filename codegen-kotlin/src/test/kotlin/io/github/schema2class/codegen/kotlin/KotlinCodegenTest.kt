@@ -602,6 +602,32 @@ class KotlinCodegenTest {
     }
 
     @Test
+    fun `kotlinx mode emits JsonClassDiscriminator for unions with a discriminator`() {
+        val type = TypeDefinition.UnionType(
+            schemaName = "Pet",
+            kotlinName = "Pet",
+            documentation = null,
+            variants = listOf(
+                UnionVariant(kotlinName = "CatVariant", type = TypeRef.Named("Cat")),
+                UnionVariant(kotlinName = "DogVariant", type = TypeRef.Named("Dog")),
+            ),
+            discriminatorProperty = "petType",
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "Pet")
+
+        source shouldContain "@JsonClassDiscriminator(\"petType\")"
+        source shouldContain "@OptIn(ExperimentalSerializationApi::class)"
+
+        // Without a discriminator, neither annotation appears
+        val plain = sourceFor(
+            kotlinxCodegen.generate(model(type.copy(discriminatorProperty = null))),
+            "Pet",
+        )
+        plain shouldNotContain "JsonClassDiscriminator"
+    }
+
+    @Test
     fun `default mode emits no serialization annotations`() {
         val type = TypeDefinition.ComplexType(
             schemaName = "plain-type",

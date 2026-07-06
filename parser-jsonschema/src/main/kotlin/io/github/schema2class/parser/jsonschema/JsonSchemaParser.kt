@@ -331,7 +331,18 @@ private class ParseContext(
             val typeRef = resolveTypeRef(variantNode, "${schemaName}_${variantLabel}")
             UnionVariant(kotlinName = variantKotlinName, type = typeRef)
         }
-        return TypeDefinition.UnionType(schemaName, kotlinName, doc, variants)
+        // OpenAPI-style discriminator: { "propertyName": "petType", ... }
+        val discriminator = node.get("discriminator")
+            ?.get("propertyName")
+            ?.textValue()
+            ?.ifBlank { null }
+        return TypeDefinition.UnionType(
+            schemaName = schemaName,
+            kotlinName = kotlinName,
+            documentation = doc,
+            variants = variants,
+            discriminatorProperty = discriminator,
+        )
     }
 
     // ── Primitive / constraint helpers ─────────────────────────────────────

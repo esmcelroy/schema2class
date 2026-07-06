@@ -10,6 +10,7 @@ import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
+import io.github.schema2class.core.ir.UnionVariant
 import io.github.schema2class.core.naming.NamespacePackageMapper
 import org.w3c.dom.Element
 import java.io.File
@@ -295,15 +296,56 @@ class XsdParser {
         }
 
         private fun processPlainComplexType(el: Element, schemaName: String) {
+            val particle = contentParticleOf(el)
+            val attributes = collectAttributeProperties(el)
+
+            // A choice that is the entire content model (no attributes, occurs once,
+            // element-only branches) maps to a sealed union. Anything murkier keeps
+            // the flattened nullable-properties mapping.
+            if (particle != null && attributes.isEmpty() && isUnionMappableChoice(particle)) {
+                val variants = xsdChildren(particle, "element").map { branch ->
+                    val prop = buildElementProperty(branch, schemaName)
+                    UnionVariant(
+                        kotlinName = toPascalCase(prop.schemaName) + "Variant",
+                        type = prop.type,
+                    )
+                }
+                types += TypeDefinition.UnionType(
+                    schemaName = schemaName,
+                    kotlinName = toPascalCase(schemaName),
+                    documentation = extractTypeDoc(el),
+                    variants = variants,
+                )
+                return
+            }
+
             val properties = mutableListOf<PropertyDefinition>()
-            contentParticleOf(el)?.let { properties += collectElementProperties(it, schemaName) }
-            properties += collectAttributeProperties(el)
+            particle?.let { properties += collectElementProperties(it, schemaName) }
+            properties += attributes
             types += TypeDefinition.ComplexType(
                 schemaName = schemaName,
                 kotlinName = toPascalCase(schemaName),
                 documentation = extractTypeDoc(el),
                 properties = properties,
             )
+        }
+
+        private fun isUnionMappableChoice(particle: Element): Boolean {
+            if (particle.localName != "choice") return false
+            if (particle.getAttribute("minOccurs").ifBlank { "1" } != "1") return false
+            if (particle.getAttribute("maxOccurs").ifBlank { "1" } != "1") return false
+            val children = particle.childNodes
+            var elementCount = 0
+            for (i in 0 until children.length) {
+                val child = children.item(i) as? Element ?: continue
+                if (child.namespaceURI != XSD_NS) continue
+                when (child.localName) {
+                    "element" -> elementCount++
+                    "annotation" -> Unit
+                    else -> return false // nested particles, wildcards, group refs
+                }
+            }
+            return elementCount >= 2
         }
 
         // ── Particle and attribute collection (groups, nesting, choice) ──────
