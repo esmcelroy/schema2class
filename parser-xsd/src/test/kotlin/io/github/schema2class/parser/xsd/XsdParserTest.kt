@@ -334,6 +334,130 @@ class XsdParserTest {
         dobProp.type shouldBe TypeRef.Primitive(PrimitiveType.DATE)
     }
 
+    // ── Inheritance: xs:extension / xs:restriction ────────────────────────────
+
+    @Test
+    fun `complexContent extension flattens base properties first with superType provenance`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Vehicle">
+                <xs:sequence>
+                  <xs:element name="make" type="xs:string"/>
+                  <xs:element name="model" type="xs:string"/>
+                </xs:sequence>
+                <xs:attribute name="id" type="xs:string" use="required"/>
+              </xs:complexType>
+              <xs:complexType name="Car">
+                <xs:complexContent>
+                  <xs:extension base="Vehicle">
+                    <xs:sequence>
+                      <xs:element name="doors" type="xs:int"/>
+                    </xs:sequence>
+                  </xs:extension>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val car = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Car" }.shouldNotBeNull()
+
+        car.properties.map { it.schemaName } shouldBe listOf("make", "model", "id", "doors")
+        car.properties.last().type shouldBe TypeRef.Primitive(PrimitiveType.INT)
+        car.superType shouldBe TypeRef.Named("Vehicle")
+    }
+
+    @Test
+    fun `complexContent extension works when base is declared later in the document`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Car">
+                <xs:complexContent>
+                  <xs:extension base="Vehicle">
+                    <xs:sequence>
+                      <xs:element name="doors" type="xs:int"/>
+                    </xs:sequence>
+                  </xs:extension>
+                </xs:complexContent>
+              </xs:complexType>
+              <xs:complexType name="Vehicle">
+                <xs:sequence>
+                  <xs:element name="make" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val car = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Car" }.shouldNotBeNull()
+        car.properties.map { it.schemaName } shouldBe listOf("make", "doors")
+    }
+
+    @Test
+    fun `complexContent restriction uses its own declared subset without inheritance`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Vehicle">
+                <xs:sequence>
+                  <xs:element name="make" type="xs:string"/>
+                  <xs:element name="model" type="xs:string"/>
+                  <xs:element name="vin" type="xs:string" minOccurs="0"/>
+                </xs:sequence>
+              </xs:complexType>
+              <xs:complexType name="RegisteredVehicle">
+                <xs:complexContent>
+                  <xs:restriction base="Vehicle">
+                    <xs:sequence>
+                      <xs:element name="make" type="xs:string"/>
+                      <xs:element name="vin" type="xs:string"/>
+                    </xs:sequence>
+                  </xs:restriction>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val restricted = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "RegisteredVehicle" }.shouldNotBeNull()
+
+        // Restriction re-declares the kept content: exactly what is listed, no more
+        restricted.properties.map { it.schemaName } shouldBe listOf("make", "vin")
+        restricted.properties[1].nullable shouldBe false
+    }
+
+    @Test
+    fun `simpleContent extension of another simpleContent type inherits content and attributes`() {
+        val model = parse(
+            """
+            <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+              <xsd:complexType name="CodeType">
+                <xsd:simpleContent>
+                  <xsd:extension base="xsd:token">
+                    <xsd:attribute name="listID" type="xsd:token" use="optional"/>
+                  </xsd:extension>
+                </xsd:simpleContent>
+              </xsd:complexType>
+              <xsd:complexType name="CurrencyCodeType">
+                <xsd:simpleContent>
+                  <xsd:restriction base="CodeType">
+                    <xsd:attribute name="listAgencyID" type="xsd:token" use="optional"/>
+                  </xsd:restriction>
+                </xsd:simpleContent>
+              </xsd:complexType>
+            </xsd:schema>
+            """
+        )
+        val currency = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "CurrencyCodeType" }.shouldNotBeNull()
+
+        // contentProperty inherited from CodeType via the flattener
+        currency.contentProperty.shouldNotBeNull().type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        currency.properties.map { it.schemaName } shouldBe listOf("listID", "listAgencyID")
+    }
+
     // ── Tests 14-16: package derivation from targetNamespace ─────────────────
 
     @Test

@@ -2,6 +2,7 @@ package io.github.schema2class.parser.xsd
 
 import io.github.schema2class.core.ir.Constraint
 import io.github.schema2class.core.ir.EnumValue
+import io.github.schema2class.core.ir.InheritanceFlattener
 import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.PropertyDefinition
 import io.github.schema2class.core.ir.PropertyKind
@@ -21,7 +22,8 @@ class XsdParser {
 
     fun parse(inputStream: InputStream, packageName: String): SchemaModel {
         val root = parseDocument(inputStream)
-        return ParseContext(listOf(root), targetNamespaceOf(root), packageName).parse()
+        val model = ParseContext(listOf(root), targetNamespaceOf(root), packageName).parse()
+        return InheritanceFlattener.flatten(listOf(model)).single()
     }
 
     fun parse(file: File, packageName: String): SchemaModel =
@@ -34,12 +36,13 @@ class XsdParser {
     ): SchemaModel {
         val root = parseDocument(inputStream)
         val namespace = targetNamespaceOf(root)
-        return ParseContext(
+        val model = ParseContext(
             roots = listOf(root),
             targetNamespace = namespace,
             packageName = packageMapper.toPackage(namespace),
             fallbackMapper = packageMapper,
         ).parse()
+        return InheritanceFlattener.flatten(listOf(model)).single()
     }
 
     /** Derives the Kotlin package from the schema's targetNamespace via [packageMapper]. */
@@ -78,7 +81,7 @@ class XsdParser {
         allNamespaces.addAll(loader.declaredImportNamespaces)
         val packages = packageMapper.toPackages(allNamespaces)
 
-        return rootsByNamespace.map { (namespace, roots) ->
+        val models = rootsByNamespace.map { (namespace, roots) ->
             ParseContext(
                 roots = roots,
                 targetNamespace = namespace,
@@ -87,6 +90,9 @@ class XsdParser {
                 fallbackMapper = packageMapper,
             ).parse()
         }
+        // Cross-namespace extension chains (e.g. qualified types extending
+        // unqualified base types) are resolved over the whole schema set.
+        return InheritanceFlattener.flatten(models)
     }
 
     private fun parseDocument(inputStream: InputStream): Element {
@@ -287,39 +293,64 @@ class XsdParser {
             )
         }
 
+        /**
+         * simpleContent: a typed text body plus attributes. When the base is an XSD
+         * built-in, it becomes the contentProperty directly. When the base is another
+         * (simpleContent) complex type — the UN/CEFACT qualified-type pattern — it is
+         * recorded as superType and InheritanceFlattener inherits the contentProperty
+         * and attributes.
+         */
         private fun processSimpleContent(typeEl: Element, schemaName: String, simpleContent: Element) {
-            val extension = xsdChild(simpleContent, "extension") ?: return
-            val base = extension.getAttribute("base")
-            val contentProperty = PropertyDefinition(
-                schemaName = "value",
-                kotlinName = "value",
-                type = resolveTypeRef(base, extension),
-                nullable = false,
-                defaultValue = null,
-                documentation = null,
-                kind = PropertyKind.CONTENT,
-            )
-            val attributes = xsdChildren(extension, "attribute").map { buildAttributeProperty(it) }
+            val derivation = xsdChild(simpleContent, "extension")
+                ?: xsdChild(simpleContent, "restriction")
+                ?: return
+            val baseRef = resolveTypeRef(derivation.getAttribute("base"), derivation)
+            val attributes = xsdChildren(derivation, "attribute").map { buildAttributeProperty(it) }
+
+            val (contentProperty, superType) = when (baseRef) {
+                is TypeRef.Primitive -> PropertyDefinition(
+                    schemaName = "value",
+                    kotlinName = "value",
+                    type = baseRef,
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    kind = PropertyKind.CONTENT,
+                ) to null
+                else -> null to baseRef
+            }
+
             types += TypeDefinition.ComplexType(
                 schemaName = schemaName,
                 kotlinName = toPascalCase(schemaName),
                 documentation = extractTypeDoc(typeEl),
                 properties = attributes,
                 contentProperty = contentProperty,
+                superType = superType,
             )
         }
 
-        // Basic complexContent+extension support; deep inheritance is schema2class-8kr.
+        /**
+         * complexContent: xs:extension inherits the base's particles (resolved by
+         * InheritanceFlattener — Kotlin data classes are final, so inheritance is
+         * flattened, with superType kept as provenance). xs:restriction re-declares
+         * the kept subset of the base's content, so its own particle list is already
+         * the complete declaration.
+         */
         private fun processComplexContent(typeEl: Element, schemaName: String, complexContent: Element) {
-            val extension = xsdChild(complexContent, "extension") ?: return
-            val base = extension.getAttribute("base").ifBlank { null }
-            val superType = base?.let { resolveTypeRef(it, extension) }
-            val sequence = xsdChild(extension, "sequence") ?: xsdChild(extension, "all")
+            val extension = xsdChild(complexContent, "extension")
+            val restriction = xsdChild(complexContent, "restriction")
+            val derivation = extension ?: restriction ?: return
+            val base = derivation.getAttribute("base").ifBlank { null }
+            // Only extension inherits; restriction's own declaration is complete.
+            val superType = if (extension != null) base?.let { resolveTypeRef(it, derivation) } else null
+
+            val sequence = xsdChild(derivation, "sequence") ?: xsdChild(derivation, "all")
             val properties = mutableListOf<PropertyDefinition>()
             sequence?.let { seq ->
                 xsdChildren(seq, "element").forEach { properties += buildElementProperty(it, schemaName) }
             }
-            xsdChildren(extension, "attribute").forEach { properties += buildAttributeProperty(it) }
+            xsdChildren(derivation, "attribute").forEach { properties += buildAttributeProperty(it) }
             types += TypeDefinition.ComplexType(
                 schemaName = schemaName,
                 kotlinName = toPascalCase(schemaName),

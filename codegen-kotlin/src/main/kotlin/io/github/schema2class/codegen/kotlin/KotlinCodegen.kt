@@ -105,10 +105,9 @@ class KotlinCodegen(private val options: Options = Options()) {
 
         type.documentation?.let { typeBuilder.addKdoc("%L", it) }
 
-        val superType = type.superType
-        if (superType != null) {
-            typeBuilder.superclass(superType.toKotlinTypeName(packageName))
-        }
+        // superType is provenance only: Kotlin data classes are final, so schema
+        // inheritance is flattened into properties by InheritanceFlattener before
+        // codegen. Emitting `: Parent()` here would not compile.
 
         for (prop in allProps) {
             val typeName = propertyTypeName(prop, packageName)
