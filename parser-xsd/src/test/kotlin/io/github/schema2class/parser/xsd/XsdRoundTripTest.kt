@@ -185,6 +185,24 @@ class XsdRoundTripTest {
         alias shouldContain "typealias ReferenceIdType = String"
     }
 
+    // ── Spring beans (real-world: groups, attributeGroups, choice, refs) ─────
+
+    @Test
+    fun `spring beans xsd parses groups and round-trips to well-formed source`() {
+        val model = parseFixture("/spring-beans.xsd", "org.springframework.beans")
+
+        // beanElements group + beanAttributes attributeGroup must be inlined:
+        // the bean element's inline type may not be empty
+        val bean = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "bean" }.shouldNotBeNull()
+        bean.properties.size shouldBeGreaterThan 10
+        bean.properties.map { it.schemaName } shouldContain "meta"
+        bean.properties.map { it.schemaName } shouldContain "constructor-arg"
+
+        val sources = codegen.generate(model)
+        assertSourcesWellFormed(sources, "org.springframework.beans")
+    }
+
     // ── Shiporder (anonymous inline nesting, no namespace) ───────────────────
 
     @Test

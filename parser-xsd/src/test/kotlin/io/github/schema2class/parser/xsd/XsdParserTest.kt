@@ -334,6 +334,134 @@ class XsdParserTest {
         dobProp.type shouldBe TypeRef.Primitive(PrimitiveType.DATE)
     }
 
+    // ── Groups: xs:group / xs:attributeGroup / element refs / choice ─────────
+
+    @Test
+    fun `group ref inlines the group's elements into the referencing type`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:group name="auditFields">
+                <xs:sequence>
+                  <xs:element name="createdBy" type="xs:string"/>
+                  <xs:element name="createdAt" type="xs:dateTime"/>
+                </xs:sequence>
+              </xs:group>
+              <xs:complexType name="Record">
+                <xs:sequence>
+                  <xs:element name="id" type="xs:string"/>
+                  <xs:group ref="auditFields"/>
+                </xs:sequence>
+              </xs:complexType>
+              <xs:complexType name="Summary">
+                <xs:group ref="auditFields"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val record = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Record" }.shouldNotBeNull()
+        record.properties.map { it.schemaName } shouldBe listOf("id", "createdBy", "createdAt")
+
+        // group as the complexType's direct content particle
+        val summary = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Summary" }.shouldNotBeNull()
+        summary.properties.map { it.schemaName } shouldBe listOf("createdBy", "createdAt")
+    }
+
+    @Test
+    fun `attributeGroup ref inlines attributes including nested groups`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:attributeGroup name="core">
+                <xs:attribute name="id" type="xs:ID"/>
+              </xs:attributeGroup>
+              <xs:attributeGroup name="i18n">
+                <xs:attribute name="lang" type="xs:language"/>
+                <xs:attributeGroup ref="core"/>
+              </xs:attributeGroup>
+              <xs:complexType name="Span">
+                <xs:attributeGroup ref="i18n"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val span = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Span" }.shouldNotBeNull()
+        span.properties.map { it.schemaName } shouldBe listOf("lang", "id")
+    }
+
+    @Test
+    fun `choice members become nullable properties`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Payment">
+                <xs:sequence>
+                  <xs:element name="amount" type="xs:decimal"/>
+                  <xs:choice>
+                    <xs:element name="iban" type="xs:string"/>
+                    <xs:element name="cardNumber" type="xs:string"/>
+                  </xs:choice>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val payment = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Payment" }.shouldNotBeNull()
+
+        payment.properties.map { it.schemaName } shouldBe listOf("amount", "iban", "cardNumber")
+        payment.properties.find { it.schemaName == "amount" }!!.nullable shouldBe false
+        payment.properties.find { it.schemaName == "iban" }!!.nullable shouldBe true
+        payment.properties.find { it.schemaName == "cardNumber" }!!.nullable shouldBe true
+    }
+
+    @Test
+    fun `self-referencing group terminates`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:group name="loop">
+                <xs:sequence>
+                  <xs:element name="label" type="xs:string"/>
+                  <xs:group ref="loop"/>
+                </xs:sequence>
+              </xs:group>
+              <xs:complexType name="Node">
+                <xs:group ref="loop"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val node = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Node" }.shouldNotBeNull()
+        node.properties.map { it.schemaName } shouldBe listOf("label")
+    }
+
+    @Test
+    fun `element ref resolves name and type from the top-level declaration`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="description" type="xs:string"/>
+              <xs:complexType name="Bean">
+                <xs:sequence>
+                  <xs:element ref="description" minOccurs="0"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val bean = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Bean" }.shouldNotBeNull()
+        val desc = bean.properties.single()
+        desc.schemaName shouldBe "description"
+        desc.type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        desc.nullable shouldBe true
+    }
+
     // ── Inheritance: xs:extension / xs:restriction ────────────────────────────
 
     @Test

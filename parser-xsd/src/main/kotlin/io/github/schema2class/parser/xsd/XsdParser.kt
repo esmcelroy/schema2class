@@ -170,7 +170,23 @@ class XsdParser {
     ) {
         private val types = mutableListOf<TypeDefinition>()
 
+        /** Top-level xs:group / xs:attributeGroup / xs:element definitions, by local name. */
+        private val groupDefs = mutableMapOf<String, Element>()
+        private val attributeGroupDefs = mutableMapOf<String, Element>()
+        private val elementDefs = mutableMapOf<String, Element>()
+
         fun parse(): SchemaModel {
+            for (root in roots) {
+                xsdChildren(root, "group").forEach { el ->
+                    el.getAttribute("name").ifBlank { null }?.let { groupDefs[it] = el }
+                }
+                xsdChildren(root, "attributeGroup").forEach { el ->
+                    el.getAttribute("name").ifBlank { null }?.let { attributeGroupDefs[it] = el }
+                }
+                xsdChildren(root, "element").forEach { el ->
+                    el.getAttribute("name").ifBlank { null }?.let { elementDefs[it] = el }
+                }
+            }
             // Top-level simpleType first — referenced by complexTypes
             for (root in roots) {
                 xsdChildren(root, "simpleType").forEach { el ->
@@ -279,18 +295,97 @@ class XsdParser {
         }
 
         private fun processPlainComplexType(el: Element, schemaName: String) {
-            val sequence = xsdChild(el, "sequence") ?: xsdChild(el, "all")
             val properties = mutableListOf<PropertyDefinition>()
-            sequence?.let { seq ->
-                xsdChildren(seq, "element").forEach { properties += buildElementProperty(it, schemaName) }
-            }
-            xsdChildren(el, "attribute").forEach { properties += buildAttributeProperty(it) }
+            contentParticleOf(el)?.let { properties += collectElementProperties(it, schemaName) }
+            properties += collectAttributeProperties(el)
             types += TypeDefinition.ComplexType(
                 schemaName = schemaName,
                 kotlinName = toPascalCase(schemaName),
                 documentation = extractTypeDoc(el),
                 properties = properties,
             )
+        }
+
+        // ── Particle and attribute collection (groups, nesting, choice) ──────
+
+        /** The content particle of a complexType or derivation: sequence, all, choice, or group ref. */
+        private fun contentParticleOf(parent: Element): Element? =
+            xsdChild(parent, "sequence")
+                ?: xsdChild(parent, "all")
+                ?: xsdChild(parent, "choice")
+                ?: xsdChild(parent, "group")
+
+        /**
+         * Walks a particle tree collecting element properties. Recurses through
+         * nested sequence/all/choice particles and resolves xs:group refs by
+         * inlining the group's particles ([visitedGroups] guards recursion).
+         * Elements under xs:choice become nullable — only one branch appears on
+         * the wire (mapping choice to a sealed type is schema2class-eq1).
+         */
+        private fun collectElementProperties(
+            particle: Element,
+            parentTypeName: String,
+            insideChoice: Boolean = false,
+            visitedGroups: MutableSet<String> = mutableSetOf(),
+        ): List<PropertyDefinition> {
+            if (particle.localName == "group") {
+                val refName = particle.getAttribute("ref").ifBlank { null }
+                    ?.let { if (':' in it) it.substringAfter(':') else it }
+                    ?: return emptyList()
+                if (!visitedGroups.add(refName)) return emptyList()
+                val def = groupDefs[refName] ?: run {
+                    warn("xs:group ref '$refName' not found; skipping")
+                    return emptyList()
+                }
+                return contentParticleOf(def)
+                    ?.let { collectElementProperties(it, parentTypeName, insideChoice, visitedGroups) }
+                    ?: emptyList()
+            }
+
+            val choiceHere = insideChoice || particle.localName == "choice"
+            val result = mutableListOf<PropertyDefinition>()
+            val children = particle.childNodes
+            for (i in 0 until children.length) {
+                val child = children.item(i) as? Element ?: continue
+                if (child.namespaceURI != XSD_NS) continue
+                when (child.localName) {
+                    "element" -> {
+                        val prop = buildElementProperty(child, parentTypeName)
+                        result += if (choiceHere && prop.type !is TypeRef.ListOf) {
+                            prop.copy(nullable = true)
+                        } else {
+                            prop
+                        }
+                    }
+                    "sequence", "all", "choice", "group" ->
+                        result += collectElementProperties(child, parentTypeName, choiceHere, visitedGroups)
+                }
+            }
+            return result
+        }
+
+        /**
+         * Direct xs:attribute children plus xs:attributeGroup refs, resolved
+         * recursively ([visited] guards self/mutual references).
+         */
+        private fun collectAttributeProperties(
+            parent: Element,
+            visited: MutableSet<String> = mutableSetOf(),
+        ): List<PropertyDefinition> {
+            val result = mutableListOf<PropertyDefinition>()
+            xsdChildren(parent, "attribute").forEach { result += buildAttributeProperty(it) }
+            for (ref in xsdChildren(parent, "attributeGroup")) {
+                val refName = ref.getAttribute("ref").ifBlank { null }
+                    ?.let { if (':' in it) it.substringAfter(':') else it }
+                    ?: continue
+                if (!visited.add(refName)) continue
+                val def = attributeGroupDefs[refName] ?: run {
+                    warn("xs:attributeGroup ref '$refName' not found; skipping")
+                    null
+                } ?: continue
+                result += collectAttributeProperties(def, visited)
+            }
+            return result
         }
 
         /**
@@ -305,7 +400,7 @@ class XsdParser {
                 ?: xsdChild(simpleContent, "restriction")
                 ?: return
             val baseRef = resolveTypeRef(derivation.getAttribute("base"), derivation)
-            val attributes = xsdChildren(derivation, "attribute").map { buildAttributeProperty(it) }
+            val attributes = collectAttributeProperties(derivation)
 
             val (contentProperty, superType) = when (baseRef) {
                 is TypeRef.Primitive -> PropertyDefinition(
@@ -345,12 +440,9 @@ class XsdParser {
             // Only extension inherits; restriction's own declaration is complete.
             val superType = if (extension != null) base?.let { resolveTypeRef(it, derivation) } else null
 
-            val sequence = xsdChild(derivation, "sequence") ?: xsdChild(derivation, "all")
             val properties = mutableListOf<PropertyDefinition>()
-            sequence?.let { seq ->
-                xsdChildren(seq, "element").forEach { properties += buildElementProperty(it, schemaName) }
-            }
-            xsdChildren(derivation, "attribute").forEach { properties += buildAttributeProperty(it) }
+            contentParticleOf(derivation)?.let { properties += collectElementProperties(it, schemaName) }
+            properties += collectAttributeProperties(derivation)
             types += TypeDefinition.ComplexType(
                 schemaName = schemaName,
                 kotlinName = toPascalCase(schemaName),
@@ -376,7 +468,10 @@ class XsdParser {
         // ── Property builders ─────────────────────────────────────────────────
 
         private fun buildElementProperty(el: Element, parentTypeName: String): PropertyDefinition {
-            val name = el.getAttribute("name")
+            val refAttr = el.getAttribute("ref").ifBlank { null }
+            val name = el.getAttribute("name").ifBlank { null }
+                ?: refAttr?.let { if (':' in it) it.substringAfter(':') else it }
+                ?: ""
             val minOccurs = el.getAttribute("minOccurs").ifBlank { "1" }
                 .let { if (it == "unbounded") Int.MAX_VALUE else it.toIntOrNull() ?: 1 }
             val maxOccurs = el.getAttribute("maxOccurs").ifBlank { "1" }
@@ -389,6 +484,7 @@ class XsdParser {
             val inlineSimple = xsdChild(el, "simpleType")
 
             val elementTypeRef: TypeRef = when {
+                refAttr != null -> resolveElementRef(refAttr)
                 inlineComplex != null -> {
                     val inlineName = "${toPascalCase(parentTypeName)}_${toPascalCase(name)}"
                     processComplexType(inlineComplex, inlineName)
@@ -411,6 +507,26 @@ class XsdParser {
                 defaultValue = null,
                 documentation = extractTypeDoc(el),
             )
+        }
+
+        /**
+         * xs:element ref="q:name": the property is named by the referenced top-level
+         * element; its type comes from that declaration's type attribute, or from
+         * the named type generated for its inline complexType/simpleType.
+         */
+        private fun resolveElementRef(refAttr: String): TypeRef {
+            val local = if (':' in refAttr) refAttr.substringAfter(':') else refAttr
+            val target = elementDefs[local] ?: run {
+                warn("xs:element ref '$refAttr' not found; typing as Any")
+                return TypeRef.Primitive(PrimitiveType.ANY)
+            }
+            val typeAttr = target.getAttribute("type").ifBlank { null }
+            return when {
+                typeAttr != null -> resolveTypeRef(typeAttr, target)
+                xsdChild(target, "complexType") != null || xsdChild(target, "simpleType") != null ->
+                    TypeRef.Named(toPascalCase(local))
+                else -> TypeRef.Primitive(PrimitiveType.ANY)
+            }
         }
 
         private fun buildAttributeProperty(el: Element): PropertyDefinition {
