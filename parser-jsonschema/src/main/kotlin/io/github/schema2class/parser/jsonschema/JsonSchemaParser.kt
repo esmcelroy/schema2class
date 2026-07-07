@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.github.schema2class.core.ir.Constraint
 import io.github.schema2class.core.ir.EnumValue
+import io.github.schema2class.core.ir.InheritanceFlattener
 import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.PropertyDefinition
 import io.github.schema2class.core.ir.SchemaModel
@@ -19,7 +20,7 @@ import java.io.InputStream
  * Parses a JSON Schema draft-07 document and produces a [SchemaModel] IR.
  *
  * Out of scope for v1 (see TODOs inside):
- * - `allOf`, `not`, `if/then/else` combiners
+ * - `not`, `if/then/else` combiners
  * - External `$ref` (cross-file) — emits `TypeRef.Named` with a warning
  * - JSON Schema `format` keyword — treated as plain STRING
  * - `$defs` is treated identically to `definitions`
@@ -79,12 +80,14 @@ private class ParseContext(
             }
         }
 
-        return SchemaModel(
+        val model = SchemaModel(
             namespace = namespace,
             packageName = packageName,
             types = types,
             sourceFormat = SourceFormat.JSON_SCHEMA,
         )
+        // Resolve allOf-derived superType chains into flattened properties.
+        return InheritanceFlattener.flatten(listOf(model)).single()
     }
 
     // ── Definition dispatch ────────────────────────────────────────────────
@@ -116,6 +119,13 @@ private class ParseContext(
                 types.add(TypeDefinition.UnionType(schemaName, kotlinName, doc, emptyList()))
                 val union = buildUnionType(schemaName, kotlinName, doc, node)
                 replace(schemaName, union)
+            }
+
+            node.has("allOf") -> {
+                // Register a placeholder before recursing to break reference cycles.
+                types.add(TypeDefinition.ComplexType(schemaName, kotlinName, doc, emptyList()))
+                val built = buildAllOfType(schemaName, kotlinName, doc, node)
+                replace(schemaName, built)
             }
 
             schemaTypeValue(node) == "object" || node.has("properties") -> {
@@ -342,6 +352,60 @@ private class ParseContext(
             documentation = doc,
             variants = variants,
             discriminatorProperty = discriminator,
+        )
+    }
+
+    /**
+     * allOf combiner. Two patterns:
+     * - Inheritance: a pure-`$ref` branch becomes [TypeDefinition.ComplexType.superType]
+     *   (resolved into flattened properties by [InheritanceFlattener] after parsing);
+     *   inline object branches merge their properties, last branch wins on collisions.
+     * - Pure intersection (no refs, no properties): constraints from all branches
+     *   flatten onto a single [TypeDefinition.AliasType].
+     */
+    fun buildAllOfType(
+        schemaName: String,
+        kotlinName: String,
+        doc: String?,
+        node: JsonNode,
+    ): TypeDefinition {
+        val branches = node.get("allOf").toList()
+        val (refBranches, inlineBranches) = branches.partition {
+            it.has("\$ref") && it.size() == 1
+        }
+
+        // Pattern 2: constraint intersection with no structural content.
+        if (refBranches.isEmpty() && inlineBranches.none { it.has("properties") }) {
+            val constraints = inlineBranches.flatMap { extractConstraints(it) }
+            val baseRef = inlineBranches.firstNotNullOfOrNull { branch ->
+                schemaTypeValue(branch)?.let { primitiveTypeRef(branch) }
+            } ?: TypeRef.Primitive(PrimitiveType.ANY)
+            return TypeDefinition.AliasType(schemaName, kotlinName, doc, baseRef, constraints)
+        }
+
+        val superType = refBranches.firstOrNull()
+            ?.let { resolveRefToTypeRef(it.get("\$ref").textValue()) as? TypeRef.Named }
+        refBranches.drop(1).forEach {
+            System.err.println(
+                "Warning: allOf of '$schemaName' has multiple \$ref branches; " +
+                    "only the first becomes the base — '${it.get("\$ref").textValue()}' ignored",
+            )
+        }
+
+        // Merge inline branches; last branch wins on duplicate property names.
+        val merged = LinkedHashMap<String, PropertyDefinition>()
+        for (branch in inlineBranches) {
+            buildComplexType(schemaName, kotlinName, doc, branch).properties.forEach {
+                merged[it.schemaName] = it
+            }
+        }
+
+        return TypeDefinition.ComplexType(
+            schemaName = schemaName,
+            kotlinName = kotlinName,
+            documentation = doc,
+            properties = merged.values.toList(),
+            superType = superType,
         )
     }
 

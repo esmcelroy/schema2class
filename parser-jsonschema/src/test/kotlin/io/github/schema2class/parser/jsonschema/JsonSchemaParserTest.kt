@@ -333,6 +333,134 @@ class JsonSchemaParserTest {
         union.discriminatorProperty shouldBe "petType"
     }
 
+    // ── allOf combiner ─────────────────────────────────────────────────────
+
+    @Test
+    fun `allOf with ref and inline branch flattens base properties first`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Base": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "createdAt": { "type": "string" }
+                  },
+                  "required": ["id"]
+                },
+                "Extended": {
+                  "allOf": [
+                    { "${'$'}ref": "#/definitions/Base" },
+                    {
+                      "type": "object",
+                      "properties": { "name": { "type": "string" } },
+                      "required": ["name"]
+                    }
+                  ]
+                }
+              }
+            }
+            """
+        )
+        val extended = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Extended" }.shouldNotBeNull()
+
+        extended.properties.map { it.schemaName } shouldBe listOf("id", "createdAt", "name")
+        extended.properties.find { it.schemaName == "id" }!!.nullable shouldBe false
+        extended.properties.find { it.schemaName == "createdAt" }!!.nullable shouldBe true
+        extended.properties.find { it.schemaName == "name" }!!.nullable shouldBe false
+        // provenance survives
+        extended.superType shouldBe TypeRef.Named("Base")
+    }
+
+    @Test
+    fun `allOf inline branch redeclaration overrides base property`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Base": {
+                  "type": "object",
+                  "properties": { "code": { "type": "string" } }
+                },
+                "Refined": {
+                  "allOf": [
+                    { "${'$'}ref": "#/definitions/Base" },
+                    {
+                      "type": "object",
+                      "properties": { "code": { "type": "integer" } },
+                      "required": ["code"]
+                    }
+                  ]
+                }
+              }
+            }
+            """
+        )
+        val refined = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Refined" }.shouldNotBeNull()
+
+        val code = refined.properties.single()
+        code.type shouldBe TypeRef.Primitive(PrimitiveType.INT)
+        code.nullable shouldBe false
+    }
+
+    @Test
+    fun `allOf constraint intersection produces AliasType with merged constraints`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Bounded": {
+                  "allOf": [
+                    { "type": "string", "minLength": 1 },
+                    { "maxLength": 100 }
+                  ]
+                }
+              }
+            }
+            """
+        )
+        val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "Bounded" }.shouldNotBeNull()
+
+        alias.aliasedType shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        alias.constraints shouldContain io.github.schema2class.core.ir.Constraint.MinLength(1)
+        alias.constraints shouldContain io.github.schema2class.core.ir.Constraint.MaxLength(100)
+    }
+
+    @Test
+    fun `allOf chain flattens transitively`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "A": {
+                  "type": "object",
+                  "properties": { "a": { "type": "string" } }
+                },
+                "B": {
+                  "allOf": [
+                    { "${'$'}ref": "#/definitions/A" },
+                    { "type": "object", "properties": { "b": { "type": "string" } } }
+                  ]
+                },
+                "C": {
+                  "allOf": [
+                    { "${'$'}ref": "#/definitions/B" },
+                    { "type": "object", "properties": { "c": { "type": "string" } } }
+                  ]
+                }
+              }
+            }
+            """
+        )
+        val c = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "C" }.shouldNotBeNull()
+        c.properties.map { it.schemaName } shouldBe listOf("a", "b", "c")
+    }
+
     @Test
     fun `defs keyword works same as definitions`() {
         val model = parse(
