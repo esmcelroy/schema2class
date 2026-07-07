@@ -412,6 +412,53 @@ class KotlinCodegenTest {
     }
 
     // -----------------------------------------------------------------------
+    // 10b. MapOf → Map<K, V>
+    // -----------------------------------------------------------------------
+    @Test
+    fun `MapOf emits Map with key and value types`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Blueprint",
+            kotlinName = "Blueprint",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "dataTypes",
+                    kotlinName = "dataTypes",
+                    type = TypeRef.MapOf(value = TypeRef.Named("DataType")),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val source = sourceFor(generate(type), "Blueprint")
+        source shouldContain "Map<String, DataType>?"
+    }
+
+    @Test
+    fun `MapOf with contextual value type annotates the value argument`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Prices",
+            kotlinName = "Prices",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "bySku",
+                    kotlinName = "bySku",
+                    type = TypeRef.MapOf(value = TypeRef.Primitive(PrimitiveType.DECIMAL)),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+
+        val source = sourceFor(kotlinxCodegen.generate(model(type)), "Prices")
+        source shouldContain "Map<String, @Contextual BigDecimal>"
+    }
+
+    // -----------------------------------------------------------------------
     // 11. kotlinx.serialization annotation mode
     // -----------------------------------------------------------------------
     private val kotlinxCodegen =

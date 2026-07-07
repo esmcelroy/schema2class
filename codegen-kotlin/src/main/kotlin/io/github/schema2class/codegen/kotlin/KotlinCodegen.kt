@@ -7,6 +7,7 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
+import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
@@ -300,6 +301,13 @@ class KotlinCodegen(private val options: Options = Options()) {
                 val element = typeArguments.single().withContextualIfNeeded(ref.element)
                 rawType.parameterizedBy(element)
             }
+            is TypeRef.MapOf -> {
+                if (this !is com.squareup.kotlinpoet.ParameterizedTypeName) return this
+                rawType.parameterizedBy(
+                    typeArguments[0].withContextualIfNeeded(ref.key),
+                    typeArguments[1].withContextualIfNeeded(ref.value),
+                )
+            }
             is TypeRef.Named -> this
         }
     }
@@ -323,6 +331,10 @@ class KotlinCodegen(private val options: Options = Options()) {
             ClassName(pkg, name)
         }
         is TypeRef.ListOf -> LIST.parameterizedBy(element.toKotlinTypeName(currentPackage))
+        is TypeRef.MapOf -> MAP.parameterizedBy(
+            key.toKotlinTypeName(currentPackage),
+            value.toKotlinTypeName(currentPackage),
+        )
     }
 
     private fun primitiveToTypeName(type: PrimitiveType): TypeName = when (type) {

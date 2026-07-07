@@ -333,6 +333,98 @@ class JsonSchemaParserTest {
         union.discriminatorProperty shouldBe "petType"
     }
 
+    // ── Dictionary types: patternProperties / additionalProperties ────────
+
+    @Test
+    fun `patternProperties dictionary property produces MapOf`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "title": "Blueprint",
+              "properties": {
+                "data_types": {
+                  "type": "object",
+                  "patternProperties": {
+                    "^[a-zA-Z_]+${'$'}": { "${'$'}ref": "#/definitions/DataType" }
+                  }
+                }
+              },
+              "definitions": {
+                "DataType": {
+                  "type": "object",
+                  "properties": { "description": { "type": "string" } }
+                }
+              }
+            }
+            """
+        )
+        val blueprint = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Blueprint" }.shouldNotBeNull()
+        blueprint.properties.single().type shouldBe
+            TypeRef.MapOf(value = TypeRef.Named("DataType"))
+    }
+
+    @Test
+    fun `schema-valued additionalProperties produces MapOf of primitive`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "title": "EnvVars",
+              "properties": {
+                "env": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+            }
+            """
+        )
+        val envVars = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "EnvVars" }.shouldNotBeNull()
+        envVars.properties.single().type shouldBe
+            TypeRef.MapOf(value = TypeRef.Primitive(PrimitiveType.STRING))
+    }
+
+    @Test
+    fun `boolean additionalProperties does not produce MapOf`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "title": "Strict",
+              "properties": {
+                "name": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+            """
+        )
+        val strict = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Strict" }.shouldNotBeNull()
+        strict.properties.single().type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+    }
+
+    @Test
+    fun `top-level dictionary definition becomes AliasType of MapOf`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Labels": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+            }
+            """
+        )
+        val labels = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "Labels" }.shouldNotBeNull()
+        labels.aliasedType shouldBe TypeRef.MapOf(value = TypeRef.Primitive(PrimitiveType.STRING))
+    }
+
     // ── allOf combiner ─────────────────────────────────────────────────────
 
     @Test

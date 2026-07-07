@@ -26,6 +26,17 @@ sealed class TypeRef {
      * XSD maxOccurs > 1 and JSON Schema "type": "array" both produce this.
      */
     data class ListOf(val element: TypeRef) : TypeRef()
+
+    /**
+     * A string-keyed dictionary of homogeneous values. JSON Schema
+     * patternProperties and schema-valued additionalProperties both produce
+     * this. [key] is [Primitive] STRING in practice but kept open for future
+     * formats. Codegen emits Map<K, V>.
+     */
+    data class MapOf(
+        val key: TypeRef = Primitive(PrimitiveType.STRING),
+        val value: TypeRef,
+    ) : TypeRef()
 }
 
 /**

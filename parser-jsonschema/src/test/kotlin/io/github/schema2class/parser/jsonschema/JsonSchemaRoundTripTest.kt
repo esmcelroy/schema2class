@@ -53,6 +53,7 @@ class JsonSchemaRoundTripTest {
     private fun namedRefsIn(ref: TypeRef): List<TypeRef.Named> = when (ref) {
         is TypeRef.Named -> listOf(ref)
         is TypeRef.ListOf -> namedRefsIn(ref.element)
+        is TypeRef.MapOf -> namedRefsIn(ref.key) + namedRefsIn(ref.value)
         is TypeRef.Primitive -> emptyList()
     }
 

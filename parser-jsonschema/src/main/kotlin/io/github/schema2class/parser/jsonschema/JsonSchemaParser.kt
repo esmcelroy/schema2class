@@ -128,6 +128,15 @@ private class ParseContext(
                 replace(schemaName, built)
             }
 
+            dictionaryValueSchema(node) != null -> {
+                val valueRef = resolveTypeRef(dictionaryValueSchema(node)!!, "${schemaName}_Value")
+                types.add(
+                    TypeDefinition.AliasType(
+                        schemaName, kotlinName, doc, TypeRef.MapOf(value = valueRef),
+                    ),
+                )
+            }
+
             schemaTypeValue(node) == "object" || node.has("properties") -> {
                 // Register a placeholder before recursing to break reference cycles.
                 types.add(TypeDefinition.ComplexType(schemaName, kotlinName, doc, emptyList()))
@@ -158,6 +167,11 @@ private class ParseContext(
      * [suggestedName] is used to name those anonymous types.
      */
     fun resolveTypeRef(node: JsonNode, suggestedName: String): TypeRef {
+        dictionaryValueSchema(node)?.let { valueSchema ->
+            return TypeRef.MapOf(
+                value = resolveTypeRef(valueSchema, "${suggestedName}_Value"),
+            )
+        }
         return when {
             node.has("\$ref") -> resolveRefToTypeRef(node.get("\$ref").textValue())
 
@@ -407,6 +421,34 @@ private class ParseContext(
             properties = merged.values.toList(),
             superType = superType,
         )
+    }
+
+    /**
+     * A dictionary-shaped object: no fixed properties, values described by
+     * patternProperties (single pattern) or a schema-valued additionalProperties.
+     * Both mean "string-keyed map of T". Returns the value schema, or null when
+     * the node is not a dictionary.
+     */
+    fun dictionaryValueSchema(node: JsonNode): JsonNode? {
+        if (node.has("properties") || node.has("\$ref") || node.has("enum") ||
+            node.has("oneOf") || node.has("anyOf") || node.has("allOf")
+        ) {
+            return null
+        }
+        val isObject = schemaTypeValue(node) == "object" ||
+            node.has("patternProperties") || node.has("additionalProperties")
+        if (!isObject) return null
+
+        node.get("patternProperties")?.let { patterns ->
+            val schemas = patterns.fields().asSequence().map { it.value }.toList()
+            // Multiple patterns with different value schemas have no single map type.
+            if (schemas.size == 1 && schemas[0].isObject) return schemas[0]
+        }
+        node.get("additionalProperties")?.let { ap ->
+            // Boolean additionalProperties is a constraint, not a value schema.
+            if (ap.isObject) return ap
+        }
+        return null
     }
 
     // ── Primitive / constraint helpers ─────────────────────────────────────
