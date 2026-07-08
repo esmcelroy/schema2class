@@ -19,6 +19,7 @@ import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.PropertyDefinition
 import io.github.schema2class.core.ir.PropertyKind
 import io.github.schema2class.core.ir.SchemaModel
+import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
 
@@ -43,6 +44,13 @@ enum class AnnotationMode {
      * properties, and @XmlValue on the xs:simpleContent content property.
      */
     XMLUTIL,
+
+    /**
+     * Jackson annotations. JSON Schema models use @JsonProperty for wire-name
+     * mappings. XSD models additionally use jackson-dataformat-xml annotations
+     * for attributes, element names, list wrappers, and text content.
+     */
+    JACKSON,
 }
 
 class KotlinCodegen(private val options: Options = Options()) {
@@ -52,11 +60,15 @@ class KotlinCodegen(private val options: Options = Options()) {
         val generateValueClasses: Boolean = false,
     )
 
-    private val annotate: Boolean
-        get() = options.annotationMode != AnnotationMode.NONE
+    private val kotlinxMode: Boolean
+        get() = options.annotationMode == AnnotationMode.KOTLINX_SERIALIZATION ||
+            options.annotationMode == AnnotationMode.XMLUTIL
 
     private val xmlMode: Boolean
         get() = options.annotationMode == AnnotationMode.XMLUTIL
+
+    private val jacksonMode: Boolean
+        get() = options.annotationMode == AnnotationMode.JACKSON
 
     /**
      * Generates Kotlin source for every type in the model.
@@ -66,17 +78,24 @@ class KotlinCodegen(private val options: Options = Options()) {
     fun generate(model: SchemaModel): Map<String, String> {
         val result = mutableMapOf<String, String>()
         for (type in model.types) {
-            val source = generateSource(type, model.packageName, model.namespace)
+            val source = generateSource(type, model.packageName, model.namespace, model.sourceFormat)
             val relativePath = model.packageName.replace('.', '/') + "/" + type.kotlinName + ".kt"
             result[relativePath] = source
         }
         return result
     }
 
-    private fun generateSource(type: TypeDefinition, packageName: String, namespace: String?): String {
+    private fun generateSource(
+        type: TypeDefinition,
+        packageName: String,
+        namespace: String?,
+        sourceFormat: SourceFormat,
+    ): String {
         val fileBuilder = FileSpec.builder(packageName, type.kotlinName)
         when (type) {
-            is TypeDefinition.ComplexType -> fileBuilder.addType(generateComplexType(type, packageName, namespace))
+            is TypeDefinition.ComplexType -> fileBuilder.addType(
+                generateComplexType(type, packageName, namespace, sourceFormat),
+            )
             is TypeDefinition.EnumType -> {
                 val (typeSpec, commentMap) = generateEnumType(type, namespace)
                 fileBuilder.addType(typeSpec)
@@ -99,6 +118,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         type: TypeDefinition.ComplexType,
         packageName: String,
         namespace: String?,
+        sourceFormat: SourceFormat,
     ): TypeSpec {
         val allProps = listOfNotNull(type.contentProperty) + type.properties
         val ownerClassName = ClassName(packageName, type.kotlinName)
@@ -133,8 +153,11 @@ class KotlinCodegen(private val options: Options = Options()) {
 
             val propBuilder = PropertySpec.builder(prop.kotlinName, resolvedTypeName)
                 .initializer(prop.kotlinName)
-            if (annotate && prop.schemaName != prop.kotlinName) {
+            if (kotlinxMode && prop.schemaName != prop.kotlinName) {
                 propBuilder.addAnnotation(serialNameAnnotation(prop.schemaName))
+            }
+            if (jacksonMode) {
+                addJacksonPropertyAnnotations(propBuilder, prop, sourceFormat)
             }
             if (xmlMode) {
                 propBuilder.addAnnotation(kindAnnotation(prop.kind))
@@ -143,7 +166,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             typeBuilder.addProperty(propBuilder.build())
         }
 
-        if (annotate) {
+        if (kotlinxMode) {
             allProps.flatMap { it.type.contextualPrimitiveTypes() }
                 .distinct()
                 .forEach { typeBuilder.addType(stringSerializerType(it)) }
@@ -170,11 +193,16 @@ class KotlinCodegen(private val options: Options = Options()) {
         val commentMap = mutableMapOf<String, String>()
 
         for (value in type.values) {
-            if (annotate && value.serializedValue != value.kotlinName) {
+            if ((kotlinxMode || jacksonMode) && value.serializedValue != value.kotlinName) {
+                val annotation = if (jacksonMode) {
+                    jsonPropertyAnnotation(value.serializedValue)
+                } else {
+                    serialNameAnnotation(value.serializedValue)
+                }
                 typeBuilder.addEnumConstant(
                     value.kotlinName,
                     TypeSpec.anonymousClassBuilder()
-                        .addAnnotation(serialNameAnnotation(value.serializedValue))
+                        .addAnnotation(annotation)
                         .build(),
                 )
             } else {
@@ -219,7 +247,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             .addModifiers(KModifier.SEALED)
         addTypeAnnotations(sealedBuilder, type.schemaName, type.kotlinName, namespace)
         val discriminator = type.discriminatorProperty
-        if (annotate && discriminator != null) {
+        if (kotlinxMode && discriminator != null) {
             // @JsonClassDiscriminator is experimental in kotlinx.serialization.json
             sealedBuilder.addAnnotation(
                 AnnotationSpec.builder(OPT_IN)
@@ -250,7 +278,7 @@ class KotlinCodegen(private val options: Options = Options()) {
                 .primaryConstructor(variantConstructor)
                 .addProperty(propSpec)
                 .superclass(sealedClassName)
-                .apply { if (annotate) addAnnotation(SERIALIZABLE) }
+                .apply { if (kotlinxMode) addAnnotation(SERIALIZABLE) }
                 .build()
 
             sealedBuilder.addType(variantClass)
@@ -288,7 +316,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             )
         addTypeAnnotations(builder, type.schemaName, type.kotlinName, namespace)
         type.documentation?.let { builder.addKdoc("%L", it) }
-        if (annotate) {
+        if (kotlinxMode) {
             type.aliasedType.contextualPrimitiveTypes()
                 .forEach { builder.addType(stringSerializerType(it)) }
         }
@@ -303,9 +331,10 @@ class KotlinCodegen(private val options: Options = Options()) {
         kotlinName: String,
         namespace: String?,
     ) {
-        if (!annotate) return
-        builder.addAnnotation(SERIALIZABLE)
-        if (schemaName != kotlinName) {
+        if (kotlinxMode) {
+            builder.addAnnotation(SERIALIZABLE)
+        }
+        if (kotlinxMode && schemaName != kotlinName) {
             builder.addAnnotation(serialNameAnnotation(schemaName))
         }
         if (xmlMode) {
@@ -321,10 +350,50 @@ class KotlinCodegen(private val options: Options = Options()) {
     private fun serialNameAnnotation(wireName: String): AnnotationSpec =
         AnnotationSpec.builder(SERIAL_NAME).addMember("%S", wireName).build()
 
+    private fun jsonPropertyAnnotation(wireName: String): AnnotationSpec =
+        AnnotationSpec.builder(JSON_PROPERTY).addMember("%S", wireName).build()
+
     private fun kindAnnotation(kind: PropertyKind): AnnotationSpec = when (kind) {
         PropertyKind.ELEMENT -> AnnotationSpec.builder(XML_ELEMENT).addMember("%L", true).build()
         PropertyKind.ATTRIBUTE -> AnnotationSpec.builder(XML_ELEMENT).addMember("%L", false).build()
         PropertyKind.CONTENT -> AnnotationSpec.builder(XML_VALUE).build()
+    }
+
+    private fun addJacksonPropertyAnnotations(
+        builder: PropertySpec.Builder,
+        prop: PropertyDefinition,
+        sourceFormat: SourceFormat,
+    ) {
+        if (sourceFormat != SourceFormat.XSD) {
+            if (prop.schemaName != prop.kotlinName) {
+                builder.addAnnotation(jsonPropertyAnnotation(prop.schemaName))
+            }
+            return
+        }
+
+        when (prop.kind) {
+            PropertyKind.CONTENT -> builder.addAnnotation(JACKSON_XML_TEXT)
+            PropertyKind.ATTRIBUTE -> builder.addAnnotation(
+                AnnotationSpec.builder(JACKSON_XML_PROPERTY)
+                    .addMember("localName = %S", prop.schemaName)
+                    .addMember("isAttribute = %L", true)
+                    .build(),
+            )
+            PropertyKind.ELEMENT -> {
+                builder.addAnnotation(
+                    AnnotationSpec.builder(JACKSON_XML_PROPERTY)
+                        .addMember("localName = %S", prop.schemaName)
+                        .build(),
+                )
+                if (prop.type is TypeRef.ListOf) {
+                    builder.addAnnotation(
+                        AnnotationSpec.builder(JACKSON_XML_ELEMENT_WRAPPER)
+                            .addMember("useWrapping = %L", false)
+                            .build(),
+                    )
+                }
+            }
+        }
     }
 
     private fun propertyTypeName(
@@ -344,7 +413,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         ref: TypeRef,
         ownerClassName: ClassName? = null,
     ): TypeName {
-        if (!annotate) return this
+        if (!kotlinxMode) return this
         return when (ref) {
             is TypeRef.Primitive ->
                 if (ref.type.needsContextual) {
@@ -484,6 +553,13 @@ class KotlinCodegen(private val options: Options = Options()) {
         val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
         val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
+        val JSON_PROPERTY = ClassName("com.fasterxml.jackson.annotation", "JsonProperty")
+        val JACKSON_XML_PROPERTY =
+            ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlProperty")
+        val JACKSON_XML_ELEMENT_WRAPPER =
+            ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlElementWrapper")
+        val JACKSON_XML_TEXT =
+            ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlText")
         val JVM_INLINE = ClassName("kotlin.jvm", "JvmInline")
         val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
         val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")

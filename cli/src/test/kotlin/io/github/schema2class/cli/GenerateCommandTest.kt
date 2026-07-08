@@ -58,6 +58,20 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `jackson mode emits jackson annotations`() {
+        val json = fixture("telemetry-payload.schema.json")
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${json.path}=com.corp.payload -o ${out.path} --annotation-mode jackson",
+        )
+
+        result.statusCode shouldBe 0
+        File(out, "com/corp/payload/TelemetryPayload.kt").readText() shouldContain
+            "@JsonProperty(\"firmware-version\")"
+    }
+
+    @Test
     fun `value classes option emits constrained simple types as value classes`() {
         val xsd = fixture("business-doc.xsd")
         val out = File(workDir, "out")
@@ -130,6 +144,17 @@ class GenerateCommandTest {
 
         result.statusCode shouldBe 1
         result.stderr shouldContain "expected .xsd, .wsdl, or .json"
+    }
+
+    @Test
+    fun `dtd and relax ng inputs point to trang conversion`() {
+        val dtd = File(workDir, "schema.dtd").apply { writeText("<!ELEMENT root EMPTY>") }
+
+        val result = cli().test("generate -i ${dtd.path} -o ${File(workDir, "out").path}")
+
+        result.statusCode shouldBe 1
+        result.stderr shouldContain "convert it to XSD with trang first"
+        result.stderr shouldContain "docs/trang-conversion.md"
     }
 
     @Test

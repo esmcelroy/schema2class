@@ -693,6 +693,96 @@ class KotlinCodegenTest {
     }
 
     @Test
+    fun `jackson mode annotates json wire names without kotlinx annotations`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Payload",
+            kotlinName = "Payload",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "firmware-version",
+                    kotlinName = "firmwareVersion",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "deviceId",
+                    kotlinName = "deviceId",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val jacksonCodegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.JACKSON))
+
+        val source = sourceFor(jacksonCodegen.generate(model(type)), "Payload")
+
+        source shouldContain "@JsonProperty(\"firmware-version\")"
+        source shouldNotContain "@JsonProperty(\"deviceId\")"
+        source shouldNotContain "@Serializable"
+        source shouldNotContain "@SerialName"
+    }
+
+    @Test
+    fun `jackson mode annotates xsd attributes text and unwrapped element lists`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "AmountList",
+            kotlinName = "AmountList",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currencyID",
+                    kotlinName = "currencyId",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    kind = io.github.schema2class.core.ir.PropertyKind.ATTRIBUTE,
+                ),
+                PropertyDefinition(
+                    schemaName = "note",
+                    kotlinName = "note",
+                    type = TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.STRING)),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+            contentProperty = PropertyDefinition(
+                schemaName = "value",
+                kotlinName = "value",
+                type = TypeRef.Primitive(PrimitiveType.STRING),
+                nullable = false,
+                defaultValue = null,
+                documentation = null,
+                kind = io.github.schema2class.core.ir.PropertyKind.CONTENT,
+            ),
+        )
+        val jacksonCodegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.JACKSON))
+        val xsdModel = SchemaModel(
+            namespace = "urn:test",
+            packageName = pkg,
+            types = listOf(type),
+            sourceFormat = SourceFormat.XSD,
+        )
+
+        val source = sourceFor(jacksonCodegen.generate(xsdModel), "AmountList")
+
+        source shouldContain "@JacksonXmlText"
+        source shouldContain "@JacksonXmlProperty("
+        source shouldContain "localName = \"currencyID\""
+        source shouldContain "isAttribute = true"
+        source shouldContain "@JacksonXmlProperty(localName = \"note\")"
+        source shouldContain "@JacksonXmlElementWrapper(useWrapping = false)"
+        source shouldNotContain "@XmlValue"
+        source shouldNotContain "@Serializable"
+    }
+
+    @Test
     fun `kotlinx mode emits JsonClassDiscriminator for unions with a discriminator`() {
         val type = TypeDefinition.UnionType(
             schemaName = "Pet",

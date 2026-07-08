@@ -56,6 +56,7 @@ class GenerateCommand : CliktCommand(
         "none" to AnnotationMode.NONE,
         "kotlinx" to AnnotationMode.KOTLINX_SERIALIZATION,
         "xmlutil" to AnnotationMode.XMLUTIL,
+        "jackson" to AnnotationMode.JACKSON,
     ).default(AnnotationMode.NONE)
 
     private val valueClasses: Boolean by option(
@@ -91,6 +92,10 @@ class GenerateCommand : CliktCommand(
                 "xsd" -> parseXsd(input)
                 "json" -> listOf(parseJsonSchema(input))
                 "wsdl" -> parseWsdl(input)
+                "dtd", "rng", "rnc" -> throw UsageError(
+                    "schema2class does not parse ${input.file.extension} directly; " +
+                        "convert it to XSD with trang first (see docs/trang-conversion.md)",
+                )
                 else -> throw UsageError(
                     "cannot detect schema format of '${input.file.name}': expected .xsd, .wsdl, or .json",
                 )

@@ -210,6 +210,20 @@ class GenerateCompileRoundTripTest {
         json.decodeFromString(payloadSerializer, encoded) shouldBe payload
     }
 
+    @Test
+    fun `jackson annotation mode generated json and xml models compile`() {
+        val jacksonCodegen = KotlinCodegen(
+            KotlinCodegen.Options(annotationMode = AnnotationMode.JACKSON),
+        )
+        val jsonModel = JsonSchemaParser().parse(
+            fixtureFile("telemetry-payload.schema.json"),
+            "com.example.jacksonjson",
+        )
+        val xsdModel = XsdParser().parse(fixtureFile("business-doc.xsd"), "com.example.jacksonxml")
+
+        compile(jacksonCodegen.generate(jsonModel) + jacksonCodegen.generate(xsdModel))
+    }
+
     // ── XSD: xmlutil mode round-trips an actual XML document ─────────────────
 
     @Test

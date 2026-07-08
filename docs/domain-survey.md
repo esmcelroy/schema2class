@@ -91,7 +91,8 @@ classes (the hard 80%) while explicitly *not* generating service stubs/bindings
   (both syntaxes) to XSD. It is barely maintained but stable and feature-complete.
 - Recommendation: do **not** write DTD/RNG parsers. Document (and optionally wrap in
   the CLI) a trang conversion step: DTD/RNG → XSD → schema2class. RELAX NG demand is
-  a publishing niche (DocBook, TEI, ODF); DTD demand is legacy. One bead covers both.
+  a publishing niche (DocBook, TEI, ODF); DTD demand is legacy. See
+  [trang-conversion.md](trang-conversion.md) for the operational recipe.
 
 ### Jackson XML — fold into existing bead
 

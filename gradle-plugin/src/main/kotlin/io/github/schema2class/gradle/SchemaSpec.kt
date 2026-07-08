@@ -45,7 +45,7 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val packageOverrides: MapProperty<String, String>
 
-    /** One of NONE, KOTLINX_SERIALIZATION, XMLUTIL (case-insensitive). */
+    /** One of NONE, KOTLINX_SERIALIZATION, XMLUTIL, JACKSON (case-insensitive). */
     @get:Input
     abstract val annotationMode: Property<String>
 
