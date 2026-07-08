@@ -211,9 +211,12 @@ class XsdParserTest {
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
               <xs:simpleType name="ShortString">
                 <xs:restriction base="xs:string">
+                  <xs:length value="8"/>
                   <xs:minLength value="1"/>
                   <xs:maxLength value="100"/>
                   <xs:pattern value="[a-z]+"/>
+                  <xs:totalDigits value="12"/>
+                  <xs:fractionDigits value="2"/>
                 </xs:restriction>
               </xs:simpleType>
             </xs:schema>
@@ -222,9 +225,12 @@ class XsdParserTest {
         val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
             .find { it.schemaName == "ShortString" }.shouldNotBeNull()
         alias.aliasedType shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+        alias.constraints shouldContain Constraint.ExactLength(8)
         alias.constraints shouldContain Constraint.MinLength(1)
         alias.constraints shouldContain Constraint.MaxLength(100)
         alias.constraints shouldContain Constraint.Pattern("[a-z]+")
+        alias.constraints shouldContain Constraint.TotalDigits(12)
+        alias.constraints shouldContain Constraint.FractionDigits(2)
     }
 
     // ── Test 10: top-level element with inline complexType ────────────────────

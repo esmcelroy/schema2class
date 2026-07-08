@@ -38,11 +38,14 @@ enum class PropertyKind {
 
 /** Validation constraints carried from the schema into the IR. */
 sealed class Constraint {
+    data class ExactLength(val value: Int) : Constraint()
     data class MinLength(val value: Int) : Constraint()
     data class MaxLength(val value: Int) : Constraint()
     data class Pattern(val regex: String) : Constraint()
     data class MinValue(val value: String) : Constraint()
     data class MaxValue(val value: String) : Constraint()
+    data class TotalDigits(val value: Int) : Constraint()
+    data class FractionDigits(val value: Int) : Constraint()
     data class MinItems(val value: Int) : Constraint()
     data class MaxItems(val value: Int) : Constraint()
 }

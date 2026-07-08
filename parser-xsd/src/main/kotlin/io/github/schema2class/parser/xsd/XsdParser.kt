@@ -270,6 +270,8 @@ class XsdParser {
 
         private fun buildConstraints(restriction: Element): List<Constraint> {
             val result = mutableListOf<Constraint>()
+            xsdChild(restriction, "length")?.getAttribute("value")?.toIntOrNull()
+                ?.let { result += Constraint.ExactLength(it) }
             xsdChild(restriction, "minLength")?.getAttribute("value")?.toIntOrNull()
                 ?.let { result += Constraint.MinLength(it) }
             xsdChild(restriction, "maxLength")?.getAttribute("value")?.toIntOrNull()
@@ -280,6 +282,10 @@ class XsdParser {
                 ?.let { result += Constraint.MinValue(it) }
             xsdChild(restriction, "maxInclusive")?.getAttribute("value")?.ifBlank { null }
                 ?.let { result += Constraint.MaxValue(it) }
+            xsdChild(restriction, "totalDigits")?.getAttribute("value")?.toIntOrNull()
+                ?.let { result += Constraint.TotalDigits(it) }
+            xsdChild(restriction, "fractionDigits")?.getAttribute("value")?.toIntOrNull()
+                ?.let { result += Constraint.FractionDigits(it) }
             return result
         }
 
