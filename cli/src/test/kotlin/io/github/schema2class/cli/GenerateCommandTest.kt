@@ -58,6 +58,19 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `value classes option emits constrained simple types as value classes`() {
+        val xsd = fixture("business-doc.xsd")
+        val out = File(workDir, "out")
+
+        val result = cli().test("generate -i ${xsd.path} -o ${out.path} --value-classes")
+
+        result.statusCode shouldBe 0
+        val referenceId = File(out, "test/business_doc/ReferenceIdType.kt").readText()
+        referenceId shouldContain "@JvmInline"
+        referenceId shouldContain "value class ReferenceIdType"
+    }
+
+    @Test
     fun `package override redirects a namespace`() {
         val xsd = fixture("business-doc.xsd")
         val out = File(workDir, "out")

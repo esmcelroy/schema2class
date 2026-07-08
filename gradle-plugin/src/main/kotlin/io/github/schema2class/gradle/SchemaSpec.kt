@@ -49,8 +49,13 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val annotationMode: Property<String>
 
+    /** Generate @JvmInline value classes for constrained simple types. */
+    @get:Input
+    abstract val valueClasses: Property<Boolean>
+
     init {
         annotationMode.convention("NONE")
+        valueClasses.convention(false)
         packageOverrides.convention(emptyMap())
     }
 }

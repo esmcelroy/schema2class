@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.options.associate
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.choice
@@ -56,6 +57,11 @@ class GenerateCommand : CliktCommand(
         "xmlutil" to AnnotationMode.XMLUTIL,
     ).default(AnnotationMode.NONE)
 
+    private val valueClasses: Boolean by option(
+        "--value-classes",
+        help = "Generate @JvmInline value classes for constrained simple types instead of typealiases",
+    ).flag(default = false)
+
     private val packageOverrides: Map<String, String> by option(
         "--package-override",
         metavar = "NAMESPACE=PACKAGE",
@@ -68,7 +74,12 @@ class GenerateCommand : CliktCommand(
     )
 
     override fun run() {
-        val codegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = annotationMode))
+        val codegen = KotlinCodegen(
+            KotlinCodegen.Options(
+                annotationMode = annotationMode,
+                generateValueClasses = valueClasses,
+            ),
+        )
         var fileCount = 0
 
         for (input in inputs) {

@@ -207,6 +207,41 @@ class KotlinCodegenTest {
         source shouldContain "typealias EmailAddress = String"
     }
 
+    @Test
+    fun `constrained AliasType emits value class when option is enabled`() {
+        val type = TypeDefinition.AliasType(
+            schemaName = "ReferenceIdType",
+            kotlinName = "ReferenceIdType",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+            constraints = listOf(io.github.schema2class.core.ir.Constraint.MinLength(1)),
+        )
+        val valueCodegen = KotlinCodegen(KotlinCodegen.Options(generateValueClasses = true))
+
+        val source = sourceFor(valueCodegen.generate(model(type)), "ReferenceIdType")
+
+        source shouldContain "@JvmInline"
+        source shouldContain "value class ReferenceIdType("
+        source shouldContain "public val `value`: String"
+        source shouldNotContain "typealias ReferenceIdType"
+    }
+
+    @Test
+    fun `unconstrained AliasType remains typealias when value class option is enabled`() {
+        val type = TypeDefinition.AliasType(
+            schemaName = "Name",
+            kotlinName = "Name",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+        )
+        val valueCodegen = KotlinCodegen(KotlinCodegen.Options(generateValueClasses = true))
+
+        val source = sourceFor(valueCodegen.generate(model(type)), "Name")
+
+        source shouldContain "typealias Name = String"
+        source shouldNotContain "value class Name"
+    }
+
     // -----------------------------------------------------------------------
     // 6. TypeRef.Primitive(DECIMAL) → java.math.BigDecimal
     // -----------------------------------------------------------------------

@@ -49,6 +49,7 @@ class Schema2ClassPluginFunctionalTest {
                     envelope {
                         source = file('schemas/envelope.xsd')
                         annotationMode = 'XMLUTIL'
+                        valueClasses = true
                     }
                     payload {
                         source = file('schemas/payload.schema.json')
@@ -70,6 +71,8 @@ class Schema2ClassPluginFunctionalTest {
         amount.exists() shouldBe true
         amount.readText() shouldContain "@XmlSerialName"
         amount.readText() shouldContain "namespace = \"urn:test:business-doc\""
+        val referenceId = File(outDir, "test/business_doc/ReferenceIdType.kt")
+        referenceId.readText() shouldContain "value class ReferenceIdType"
 
         // JSON side: explicit package, kotlinx annotations
         val payload = File(outDir, "com/corp/payload/TelemetryPayload.kt")

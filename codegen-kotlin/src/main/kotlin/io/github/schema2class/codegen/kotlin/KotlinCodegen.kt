@@ -49,6 +49,7 @@ class KotlinCodegen(private val options: Options = Options()) {
 
     data class Options(
         val annotationMode: AnnotationMode = AnnotationMode.NONE,
+        val generateValueClasses: Boolean = false,
     )
 
     private val annotate: Boolean
@@ -83,7 +84,13 @@ class KotlinCodegen(private val options: Options = Options()) {
                 return applyEnumComments(raw, commentMap)
             }
             is TypeDefinition.UnionType -> fileBuilder.addType(generateUnionType(type, packageName, namespace))
-            is TypeDefinition.AliasType -> fileBuilder.addTypeAlias(generateAliasType(type, packageName))
+            is TypeDefinition.AliasType -> {
+                if (options.generateValueClasses && type.constraints.isNotEmpty()) {
+                    fileBuilder.addType(generateValueClass(type, packageName, namespace))
+                } else {
+                    fileBuilder.addTypeAlias(generateAliasType(type, packageName))
+                }
+            }
         }
         return fileBuilder.build().toString()
     }
@@ -256,6 +263,35 @@ class KotlinCodegen(private val options: Options = Options()) {
         val aliasedTypeName = type.aliasedType.toKotlinTypeName(packageName)
         val builder = TypeAliasSpec.builder(type.kotlinName, aliasedTypeName)
         type.documentation?.let { builder.addKdoc("%L", it) }
+        return builder.build()
+    }
+
+    private fun generateValueClass(
+        type: TypeDefinition.AliasType,
+        packageName: String,
+        namespace: String?,
+    ): TypeSpec {
+        val ownerClassName = ClassName(packageName, type.kotlinName)
+        val typeName = type.aliasedType.toKotlinTypeName(packageName)
+            .withContextualIfNeeded(type.aliasedType, ownerClassName)
+        val constructor = FunSpec.constructorBuilder()
+            .addParameter("value", typeName)
+            .build()
+        val builder = TypeSpec.classBuilder(type.kotlinName)
+            .addModifiers(KModifier.VALUE)
+            .addAnnotation(JVM_INLINE)
+            .primaryConstructor(constructor)
+            .addProperty(
+                PropertySpec.builder("value", typeName)
+                    .initializer("value")
+                    .build(),
+            )
+        addTypeAnnotations(builder, type.schemaName, type.kotlinName, namespace)
+        type.documentation?.let { builder.addKdoc("%L", it) }
+        if (annotate) {
+            type.aliasedType.contextualPrimitiveTypes()
+                .forEach { builder.addType(stringSerializerType(it)) }
+        }
         return builder.build()
     }
 
@@ -448,6 +484,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
         val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
+        val JVM_INLINE = ClassName("kotlin.jvm", "JvmInline")
         val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
         val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
         val PRIMITIVE_SERIAL_DESCRIPTOR =

@@ -37,7 +37,12 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
         for (spec in specs.get()) {
             val source = spec.source.get().asFile
             val mode = parseAnnotationMode(spec)
-            val codegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = mode))
+            val codegen = KotlinCodegen(
+                KotlinCodegen.Options(
+                    annotationMode = mode,
+                    generateValueClasses = spec.valueClasses.get(),
+                ),
+            )
 
             val models: List<SchemaModel> = when (source.extension.lowercase()) {
                 "xsd" -> parseXsd(spec, source)
