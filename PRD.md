@@ -182,8 +182,9 @@ enum class Color { RED, GREEN, BLUE }
 
 ### Phase 3 — Advanced Type Mapping
 - [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)
-- [x] `$ref` and `$defs` resolution — same-document and circular refs;
-      external file refs still open (`schema2class-1so`)
+- [x] `$ref` and `$defs` resolution — same-document, circular, and external
+      file refs (`parseWithRefs`: one model per document, shared types
+      generated once, cross-document cycles safe)
 - [x] `xs:extension` / `xs:restriction` inheritance mapping — flattened by
       `InheritanceFlattener` (data classes are final); restriction re-declares
       kept content; cross-namespace chains resolved over the whole schema set

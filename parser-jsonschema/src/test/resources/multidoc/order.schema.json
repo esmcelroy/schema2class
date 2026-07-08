@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Order",
+  "type": "object",
+  "required": ["id", "billing"],
+  "properties": {
+    "id": { "type": "string" },
+    "billing": { "$ref": "common.json#/definitions/Address" },
+    "shipping": { "$ref": "common.json#/definitions/Address" },
+    "customer": { "$ref": "customer.schema.json" }
+  }
+}

@@ -36,6 +36,81 @@ class JsonSchemaParser {
     /** Convenience overload for [File] inputs. */
     fun parse(file: File, packageName: String): SchemaModel =
         file.inputStream().use { parse(it, packageName) }
+
+    /**
+     * Parses [file] and every document reachable through external `$ref`s
+     * (relative paths like `common.json#/definitions/Address`), returning one
+     * [SchemaModel] per document — the entry document first.
+     *
+     * - Each document is parsed once, keyed by canonical path; cross-document
+     *   ref cycles are safe (external refs enqueue, they never recurse).
+     * - The entry document gets [packageName]; every other document gets
+     *   `packageName.<sanitized file stem>` (deduplicated with numeric suffixes),
+     *   so shared types generate a single class in a stable package.
+     * - Unresolvable files fall back to the single-document behavior: a warning
+     *   and a same-package `TypeRef.Named`.
+     */
+    fun parseWithRefs(file: File, packageName: String): List<SchemaModel> {
+        val entry = file.canonicalFile
+        val packagesByPath = LinkedHashMap<String, String>()
+        val usedPackages = mutableSetOf(packageName)
+        packagesByPath[entry.path] = packageName
+
+        fun packageFor(doc: File): String = packagesByPath.getOrPut(doc.path) {
+            val stem = doc.name
+                .removeSuffix(".json").removeSuffix(".schema")
+                .lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_')
+                .ifBlank { "doc" }
+                .let { if (it.first().isDigit()) "_$it" else it }
+            var candidate = "$packageName.$stem"
+            var counter = 2
+            while (!usedPackages.add(candidate)) {
+                candidate = "$packageName.${stem}_${counter++}"
+            }
+            candidate
+        }
+
+        val queue = ArrayDeque(listOf(entry))
+        val models = LinkedHashMap<String, SchemaModel>()
+
+        while (queue.isNotEmpty()) {
+            val doc = queue.removeFirst()
+            if (models.containsKey(doc.path)) continue
+
+            val resolver: (String) -> TypeRef = resolver@{ refPath ->
+                val filePart = refPath.substringBefore('#')
+                val pointer = refPath.substringAfter('#', missingDelimiterValue = "")
+                val target = File(doc.parentFile, filePart).canonicalFile
+                if (!target.isFile) {
+                    System.err.println(
+                        "Warning: external \$ref target not found: $refPath (from ${doc.name})",
+                    )
+                    val simpleName = refPath.substringAfterLast("/").substringAfterLast("#")
+                        .removeSuffix(".json").removeSuffix(".schema")
+                    return@resolver TypeRef.Named(toPascalCase(simpleName.ifEmpty { "External" }))
+                }
+                if (!models.containsKey(target.path)) queue.addLast(target)
+                val name = pointer.substringAfterLast('/').ifBlank { null }
+                    ?: rootTypeName(mapper.readTree(target))
+                    ?: target.name.removeSuffix(".json").removeSuffix(".schema")
+                TypeRef.Named(toPascalCase(name), packageName = packageFor(target))
+            }
+
+            val root = doc.inputStream().use { mapper.readTree(it) }
+            models[doc.path] = ParseContext(packageFor(doc), root, resolver).parse()
+        }
+
+        return models.values.toList()
+    }
+}
+
+/** The name parse() will give a document's root object type, or null if it has none. */
+private fun rootTypeName(root: JsonNode): String? {
+    if (root.get("type")?.textValue() != "object" && !root.has("properties")) return null
+    return root.get("title")?.textValue()
+        ?: root.get("\$id")?.textValue()
+            ?.substringAfterLast("/")?.removeSuffix(".json")?.removeSuffix(".schema")
+        ?: "Root"
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,6 +120,8 @@ class JsonSchemaParser {
 private class ParseContext(
     val packageName: String,
     val root: JsonNode,
+    /** Resolves external (non-`#`) refs in multi-document parses; null = warn and degrade. */
+    val externalResolver: ((String) -> TypeRef)? = null,
 ) {
     val types = mutableListOf<TypeDefinition>()
 
@@ -218,13 +295,16 @@ private class ParseContext(
      */
     fun resolveRefToTypeRef(refPath: String): TypeRef {
         if (!refPath.startsWith("#")) {
-            // TODO v1: external $ref not supported — emit named ref with null package and warn
+            externalResolver?.let { return it(refPath) }
+            // Single-document parse: emit named ref with null package and warn.
             val simpleName = refPath
                 .substringAfterLast("/")
                 .substringAfterLast("#")
                 .removeSuffix(".json")
                 .removeSuffix(".schema")
-            System.err.println("Warning: external \$ref not supported in v1, emitting named ref: $refPath")
+            System.err.println(
+                "Warning: external \$ref outside parseWithRefs, emitting named ref: $refPath",
+            )
             return TypeRef.Named(toPascalCase(simpleName.ifEmpty { "External" }), packageName = null)
         }
 
