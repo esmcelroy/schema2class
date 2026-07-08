@@ -15,4 +15,10 @@ build/
 .DS_Store
 
 # sample data
-samples/.claude/worktrees/
+samples/
+
+# worktrees
+.claude/worktrees/
+
+# analysis
+.scannerwork/
