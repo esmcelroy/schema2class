@@ -3,7 +3,7 @@ plugins {
 }
 
 application {
-    mainClass.set("io.github.schema2class.cli.MainKt")
+    mainClass.set("ca.esmcelroy.schema2class.cli.Schema2ClassCliKt")
 }
 
 dependencies {

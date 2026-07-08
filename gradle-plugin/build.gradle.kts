@@ -5,8 +5,8 @@ plugins {
 gradlePlugin {
     plugins {
         create("schema2class") {
-            id = "io.github.schema2class"
-            implementationClass = "io.github.schema2class.gradle.Schema2ClassPlugin"
+            id = "ca.esmcelroy.schema2class"
+            implementationClass = "ca.esmcelroy.schema2class.gradle.Schema2ClassPlugin"
             displayName = "schema2class"
             description = "Generate idiomatic Kotlin classes from XSD and JSON Schema"
         }

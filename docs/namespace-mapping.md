@@ -2,7 +2,7 @@
 
 Schema namespaces are URIs — an XSD `targetNamespace` or a JSON Schema `$id`. When you
 don't supply an explicit package name, `NamespacePackageMapper`
-(`io.github.schema2class.core.naming`) derives one. The convention follows JAXB,
+(`ca.esmcelroy.schema2class.core.naming`) derives one. The convention follows JAXB,
 adapted for Kotlin.
 
 ## Default derivation

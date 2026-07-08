@@ -11,7 +11,7 @@ the payload class is generated from its own schema.
 ```kotlin
 plugins {
     kotlin("jvm")
-    id("io.github.schema2class")
+    id("ca.esmcelroy.schema2class")
 }
 
 schema2class {

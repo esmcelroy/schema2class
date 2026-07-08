@@ -90,7 +90,7 @@ codegen-kotlin/       IR → Kotlin source via KotlinPoet. AnnotationMode:
                       NONE | KOTLINX_SERIALIZATION | XMLUTIL (superset, adds
                       @XmlSerialName/@XmlElement/@XmlValue from PropertyKind)
 cli/                  Clikt: schema2class generate -i FILE[=PACKAGE]... (mixed formats)
-gradle-plugin/        id "io.github.schema2class", schema2classGenerate task,
+gradle-plugin/        id "ca.esmcelroy.schema2class", schema2classGenerate task,
                       schema2class { schemas { ... } } DSL, source-set wiring
 integration-tests/    Test-only module: generates, compiles in-test
                       (kotlin-compile-testing + serialization plugin), round-trips
