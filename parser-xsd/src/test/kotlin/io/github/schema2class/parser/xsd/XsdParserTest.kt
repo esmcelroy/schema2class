@@ -233,6 +233,41 @@ class XsdParserTest {
         alias.constraints shouldContain Constraint.FractionDigits(2)
     }
 
+    @Test
+    fun `element and attribute default and fixed values produce kotlin literals`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Defaults">
+                <xs:sequence>
+                  <xs:element name="name" type="xs:string" default="${'$'}{env}"/>
+                  <xs:element name="count" type="xs:int" default="7"/>
+                  <xs:element name="rate" type="xs:decimal" fixed="12.50"/>
+                  <xs:element name="enabled" type="xs:boolean" fixed="1"/>
+                  <xs:element name="when" type="xs:date" default="2026-07-08"/>
+                </xs:sequence>
+                <xs:attribute name="mode" type="xs:string" default="auto"/>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val type = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Defaults" }.shouldNotBeNull()
+
+        type.properties.find { it.schemaName == "name" }.shouldNotBeNull()
+            .defaultValue shouldBe "\"\\${'$'}{env}\""
+        type.properties.find { it.schemaName == "count" }.shouldNotBeNull()
+            .defaultValue shouldBe "7"
+        type.properties.find { it.schemaName == "rate" }.shouldNotBeNull()
+            .defaultValue shouldBe "java.math.BigDecimal(\"12.50\")"
+        type.properties.find { it.schemaName == "enabled" }.shouldNotBeNull()
+            .defaultValue shouldBe "true"
+        type.properties.find { it.schemaName == "when" }.shouldNotBeNull()
+            .defaultValue shouldBe "java.time.LocalDate.parse(\"2026-07-08\")"
+        type.properties.find { it.schemaName == "mode" }.shouldNotBeNull()
+            .defaultValue shouldBe "\"auto\""
+    }
+
     // ── Test 10: top-level element with inline complexType ────────────────────
 
     @Test

@@ -552,7 +552,7 @@ class XsdParser {
                 kotlinName = toCamelCase(name),
                 type = if (isList) TypeRef.ListOf(elementTypeRef) else elementTypeRef,
                 nullable = isNullable,
-                defaultValue = null,
+                defaultValue = defaultLiteral(el, if (isList) TypeRef.ListOf(elementTypeRef) else elementTypeRef, name),
                 documentation = extractTypeDoc(el),
             )
         }
@@ -587,10 +587,73 @@ class XsdParser {
                 kotlinName = toCamelCase(name),
                 type = typeRef,
                 nullable = use != "required",
-                defaultValue = null,
+                defaultValue = defaultLiteral(el, typeRef, name),
                 documentation = extractTypeDoc(el),
                 kind = PropertyKind.ATTRIBUTE,
             )
+        }
+
+        private fun defaultLiteral(el: Element, typeRef: TypeRef, propertyName: String): String? {
+            val value = el.getAttribute("default").ifBlank {
+                el.getAttribute("fixed").ifBlank { null }
+            } ?: return null
+            return kotlinLiteralForLexicalValue(value, typeRef, propertyName)
+        }
+
+        private fun kotlinLiteralForLexicalValue(value: String, typeRef: TypeRef, propertyName: String): String? =
+            when (typeRef) {
+                is TypeRef.Primitive -> primitiveLiteral(value, typeRef.type)
+                is TypeRef.Named -> quoteKotlinString(value)
+                is TypeRef.ListOf, is TypeRef.MapOf -> {
+                    warn("Skipping default/fixed value for non-scalar property '$propertyName'")
+                    null
+                }
+            }
+
+        private fun primitiveLiteral(value: String, type: PrimitiveType): String? = when (type) {
+            PrimitiveType.STRING, PrimitiveType.URI -> quoteKotlinString(value)
+            PrimitiveType.INT, PrimitiveType.LONG, PrimitiveType.DOUBLE -> value
+            PrimitiveType.FLOAT -> "${value}f"
+            PrimitiveType.BOOLEAN -> when (value) {
+                "true", "1" -> "true"
+                "false", "0" -> "false"
+                else -> quoteKotlinString(value)
+            }
+            PrimitiveType.DECIMAL -> "java.math.BigDecimal(${quoteKotlinString(value)})"
+            PrimitiveType.DATE -> "java.time.LocalDate.parse(${quoteKotlinString(value)})"
+            PrimitiveType.DATE_TIME -> "java.time.OffsetDateTime.parse(${quoteKotlinString(value)})"
+            PrimitiveType.DURATION -> "java.time.Duration.parse(${quoteKotlinString(value)})"
+            PrimitiveType.BYTES, PrimitiveType.ANY -> {
+                warn("Skipping default/fixed value for $type property")
+                null
+            }
+        }
+
+        private fun quoteKotlinString(value: String): String = buildString {
+            append('"')
+            value.forEach { ch ->
+                when (ch) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '$' -> {
+                        append('\\')
+                        append('$')
+                    }
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    '\b' -> append("\\b")
+                    else -> {
+                        if (ch < ' ') {
+                            append("\\u")
+                            append(ch.code.toString(16).padStart(4, '0'))
+                        } else {
+                            append(ch)
+                        }
+                    }
+                }
+            }
+            append('"')
         }
 
         // ── Type resolution ───────────────────────────────────────────────────
