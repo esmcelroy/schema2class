@@ -214,6 +214,16 @@ class XsdParser {
         // ── Simple types ──────────────────────────────────────────────────────
 
         private fun processSimpleType(el: Element, schemaName: String) {
+            val list = xsdChild(el, "list")
+            if (list != null) {
+                addListAliasType(el, schemaName, list)
+                return
+            }
+            val union = xsdChild(el, "union")
+            if (union != null) {
+                addUnionSimpleType(el, schemaName, union)
+                return
+            }
             val restriction = xsdChild(el, "restriction")
             if (restriction == null) {
                 addAliasType(el, schemaName, null)
@@ -254,6 +264,70 @@ class XsdParser {
                 values = values,
                 baseType = baseType,
             )
+        }
+
+        private fun addListAliasType(typeEl: Element, schemaName: String, list: Element) {
+            val itemRef = list.getAttribute("itemType")
+                .ifBlank { null }
+                ?.let { resolveTypeRef(it, list) }
+                ?: xsdChild(list, "simpleType")?.let { inline ->
+                    val inlineName = "${toPascalCase(schemaName)}Item"
+                    processSimpleType(inline, inlineName)
+                    TypeRef.Named(toPascalCase(inlineName))
+                }
+                ?: TypeRef.Primitive(PrimitiveType.STRING)
+            types += TypeDefinition.AliasType(
+                schemaName = schemaName,
+                kotlinName = toPascalCase(schemaName),
+                documentation = extractTypeDoc(typeEl),
+                aliasedType = TypeRef.ListOf(itemRef),
+            )
+        }
+
+        private fun addUnionSimpleType(typeEl: Element, schemaName: String, union: Element) {
+            val memberRefs = mutableListOf<TypeRef>()
+            union.getAttribute("memberTypes")
+                .split(Regex("\\s+"))
+                .mapNotNull { it.ifBlank { null } }
+                .forEach { memberRefs += resolveTypeRef(it, union) }
+            xsdChildren(union, "simpleType").forEachIndexed { index, inline ->
+                val inlineName = "${toPascalCase(schemaName)}Member${index + 1}"
+                processSimpleType(inline, inlineName)
+                memberRefs += TypeRef.Named(toPascalCase(inlineName))
+            }
+
+            val variants = distinguishableUnionVariants(memberRefs)
+            if (variants == null) {
+                types += TypeDefinition.AliasType(
+                    schemaName = schemaName,
+                    kotlinName = toPascalCase(schemaName),
+                    documentation = extractTypeDoc(typeEl),
+                    aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+                )
+            } else {
+                types += TypeDefinition.UnionType(
+                    schemaName = schemaName,
+                    kotlinName = toPascalCase(schemaName),
+                    documentation = extractTypeDoc(typeEl),
+                    variants = variants,
+                )
+            }
+        }
+
+        private fun distinguishableUnionVariants(memberRefs: List<TypeRef>): List<UnionVariant>? {
+            if (memberRefs.size < 2) return null
+            if (memberRefs.any { it == TypeRef.Primitive(PrimitiveType.STRING) || it == TypeRef.Primitive(PrimitiveType.ANY) }) {
+                return null
+            }
+            if (memberRefs.distinct().size != memberRefs.size) return null
+            return memberRefs.map { UnionVariant(kotlinName = unionVariantName(it), type = it) }
+        }
+
+        private fun unionVariantName(ref: TypeRef): String = when (ref) {
+            is TypeRef.Primitive -> "${toPascalCase(ref.type.name.lowercase())}Variant"
+            is TypeRef.Named -> "${ref.name}Variant"
+            is TypeRef.ListOf -> "ListVariant"
+            is TypeRef.MapOf -> "MapVariant"
         }
 
         private fun addAliasType(typeEl: Element, schemaName: String, restriction: Element?) {

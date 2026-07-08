@@ -268,6 +268,87 @@ class XsdParserTest {
             .defaultValue shouldBe "\"auto\""
     }
 
+    @Test
+    fun `simpleType list produces AliasType of ListOf item type`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="IntList">
+                <xs:list itemType="xs:int"/>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+        val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "IntList" }.shouldNotBeNull()
+
+        alias.aliasedType shouldBe TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.INT))
+    }
+
+    @Test
+    fun `simpleType union with distinguishable members produces UnionType`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="FlagOrCount">
+                <xs:union memberTypes="xs:boolean xs:int"/>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+        val union = model.types.filterIsInstance<TypeDefinition.UnionType>()
+            .find { it.schemaName == "FlagOrCount" }.shouldNotBeNull()
+
+        union.variants.map { it.kotlinName } shouldBe listOf("BooleanVariant", "IntVariant")
+        union.variants.map { it.type } shouldBe listOf(
+            TypeRef.Primitive(PrimitiveType.BOOLEAN),
+            TypeRef.Primitive(PrimitiveType.INT),
+        )
+    }
+
+    @Test
+    fun `simpleType union with string member degrades to String alias`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="TokenOrInt">
+                <xs:union memberTypes="xs:string xs:int"/>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+        val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "TokenOrInt" }.shouldNotBeNull()
+
+        alias.aliasedType shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+    }
+
+    @Test
+    fun `inline simpleType list element references generated alias type`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Palette">
+                <xs:sequence>
+                  <xs:element name="colors">
+                    <xs:simpleType>
+                      <xs:list itemType="xs:string"/>
+                    </xs:simpleType>
+                  </xs:element>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """
+        )
+        val palette = model.types.filterIsInstance<TypeDefinition.ComplexType>()
+            .find { it.schemaName == "Palette" }.shouldNotBeNull()
+        palette.properties.single { it.schemaName == "colors" }
+            .type shouldBe TypeRef.Named("PaletteColors")
+        val alias = model.types.filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "Palette_Colors" }.shouldNotBeNull()
+        alias.aliasedType shouldBe TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.STRING))
+    }
+
     // ── Test 10: top-level element with inline complexType ────────────────────
 
     @Test
