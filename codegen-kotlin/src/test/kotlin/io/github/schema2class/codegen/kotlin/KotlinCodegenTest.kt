@@ -437,7 +437,7 @@ class KotlinCodegenTest {
     }
 
     @Test
-    fun `MapOf with contextual value type annotates the value argument`() {
+    fun `MapOf with serializer value type annotates the value argument`() {
         val type = TypeDefinition.ComplexType(
             schemaName = "Prices",
             kotlinName = "Prices",
@@ -455,7 +455,9 @@ class KotlinCodegenTest {
         )
 
         val source = sourceFor(kotlinxCodegen.generate(model(type)), "Prices")
-        source shouldContain "Map<String, @Contextual BigDecimal>"
+        source shouldContain "Map<String, @Serializable(with ="
+        source shouldContain "Schema2ClassBigDecimalAsStringSerializer::class) BigDecimal>"
+        source shouldContain "object Schema2ClassBigDecimalAsStringSerializer : KSerializer<BigDecimal>"
     }
 
     // -----------------------------------------------------------------------
@@ -501,7 +503,7 @@ class KotlinCodegenTest {
     }
 
     @Test
-    fun `kotlinx mode adds Contextual to java math and time types`() {
+    fun `kotlinx mode adds string serializers to java math and time types`() {
         val type = TypeDefinition.ComplexType(
             schemaName = "Price",
             kotlinName = "Price",
@@ -528,10 +530,14 @@ class KotlinCodegenTest {
 
         val source = sourceFor(kotlinxCodegen.generate(model(type)), "Price")
 
-        source shouldContain "@Contextual"
+        source shouldContain "@Serializable(with = Schema2ClassBigDecimalAsStringSerializer::class)"
         source shouldContain "BigDecimal"
+        source shouldContain "object Schema2ClassBigDecimalAsStringSerializer : KSerializer<BigDecimal>"
         // List element type is annotated, not the list itself
-        source shouldContain "List<@Contextual LocalDate>"
+        source shouldContain "List<@Serializable(with = Schema2ClassLocalDateAsStringSerializer::class)"
+        source shouldContain "LocalDate>"
+        source shouldContain "object Schema2ClassLocalDateAsStringSerializer : KSerializer<LocalDate>"
+        source shouldNotContain "@Contextual"
     }
 
     @Test

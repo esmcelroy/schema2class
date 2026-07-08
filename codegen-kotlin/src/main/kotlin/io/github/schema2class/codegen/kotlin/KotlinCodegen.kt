@@ -30,9 +30,9 @@ enum class AnnotationMode {
     /**
      * kotlinx.serialization: @Serializable on classes/enums/sealed hierarchies,
      * @SerialName where the wire name differs from the Kotlin name, and
-     * @Contextual on java.math/java.time property types (BigDecimal, LocalDate,
-     * OffsetDateTime, Duration), which have no built-in kotlinx serializers —
-     * consumers register those via a serializersModule.
+     * generated string serializers on java.math/java.time property types
+     * (BigDecimal, LocalDate, OffsetDateTime, Duration), which have no built-in
+     * kotlinx serializers.
      */
     KOTLINX_SERIALIZATION,
 
@@ -136,7 +136,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             typeBuilder.addProperty(propBuilder.build())
         }
 
-        if (xmlMode) {
+        if (annotate) {
             allProps.flatMap { it.type.contextualPrimitiveTypes() }
                 .distinct()
                 .forEach { typeBuilder.addType(stringSerializerType(it)) }
@@ -299,9 +299,10 @@ class KotlinCodegen(private val options: Options = Options()) {
         prop.type.toKotlinTypeName(packageName).withContextualIfNeeded(prop.type, ownerClassName)
 
     /**
-     * Attaches @Contextual to java.math/java.time types (or the element type of a list
-     * of them) — kotlinx.serialization has no built-in serializers for those. In
-     * XMLUTIL mode, use generated string serializers so @XmlValue remains text.
+     * Attaches concrete string serializers to java.math/java.time types (or the
+     * element type of a list of them) in annotated modes. kotlinx.serialization
+     * has no built-in serializers for those; concrete string descriptors also
+     * keep XMLUTIL @XmlValue content as text.
      */
     private fun TypeName.withContextualIfNeeded(
         ref: TypeRef,
@@ -311,7 +312,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         return when (ref) {
             is TypeRef.Primitive ->
                 if (ref.type.needsContextual) {
-                    val annotation = if (xmlMode && ownerClassName != null) {
+                    val annotation = if (ownerClassName != null) {
                         stringSerializerAnnotation(ownerClassName, ref.type)
                     } else {
                         contextualAnnotation()

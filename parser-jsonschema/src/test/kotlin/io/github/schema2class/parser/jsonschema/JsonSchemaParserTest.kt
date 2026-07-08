@@ -345,6 +345,39 @@ class JsonSchemaParserTest {
     }
 
     @Test
+    fun `string format keyword maps to richer primitive types`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "site": { "type": "string", "format": "uri" },
+                "link": { "type": "string", "format": "uri-reference" },
+                "day": { "type": "string", "format": "date" },
+                "recordedAt": { "type": "string", "format": "date-time" },
+                "elapsed": { "type": "string", "format": "duration" },
+                "custom": { "type": "string", "format": "slug" }
+              }
+            }
+            """
+        )
+        val rootType = model.types.filterIsInstance<TypeDefinition.ComplexType>().first()
+
+        rootType.properties.find { it.schemaName == "site" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.URI)
+        rootType.properties.find { it.schemaName == "link" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.URI)
+        rootType.properties.find { it.schemaName == "day" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.DATE)
+        rootType.properties.find { it.schemaName == "recordedAt" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.DATE_TIME)
+        rootType.properties.find { it.schemaName == "elapsed" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.DURATION)
+        rootType.properties.find { it.schemaName == "custom" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Primitive(PrimitiveType.STRING)
+    }
+
+    @Test
     fun `discriminator propertyName is captured on union types`() {
         val model = parse(
             """

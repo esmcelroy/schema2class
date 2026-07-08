@@ -2,6 +2,7 @@ package io.github.schema2class.integration
 
 import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
@@ -128,6 +129,7 @@ class GenerateCompileRoundTripTest {
 
         val mapper = JsonMapper.builder()
             .addModule(kotlinModule())
+            .addModule(JavaTimeModule())
             .enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS)
             .build()
 

@@ -22,7 +22,7 @@ import java.io.InputStream
  * Out of scope for v1 (see TODOs inside):
  * - `not`, `if/then/else` combiners
  * - External `$ref` (cross-file) — emits `TypeRef.Named` with a warning
- * - JSON Schema `format` keyword — treated as plain STRING
+ * - Unknown JSON Schema `format` keywords — treated as plain STRING
  * - `$defs` is treated identically to `definitions`
  */
 class JsonSchemaParser {
@@ -548,14 +548,22 @@ private class ParseContext(
 
     fun primitiveTypeRef(node: JsonNode): TypeRef {
         return when (schemaTypeValue(node)) {
-            "string" -> TypeRef.Primitive(PrimitiveType.STRING)
+            "string" -> TypeRef.Primitive(stringFormatPrimitive(node))
             "integer" -> TypeRef.Primitive(PrimitiveType.INT)
             "number" -> TypeRef.Primitive(PrimitiveType.DOUBLE)
             "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
-            // TODO v1: format keyword (date, date-time, etc.) — treated as STRING
             else -> TypeRef.Primitive(PrimitiveType.ANY)
         }
     }
+
+    private fun stringFormatPrimitive(node: JsonNode): PrimitiveType =
+        when (node.get("format")?.textValue()) {
+            "uri", "uri-reference" -> PrimitiveType.URI
+            "date" -> PrimitiveType.DATE
+            "date-time" -> PrimitiveType.DATE_TIME
+            "duration" -> PrimitiveType.DURATION
+            else -> PrimitiveType.STRING
+        }
 
     fun kotlinDefaultLiteral(defaultNode: JsonNode?, propSchemaName: String): String? {
         if (defaultNode == null) return null

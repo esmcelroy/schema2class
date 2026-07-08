@@ -7,6 +7,7 @@ dependencies {
 
     testImplementation(libs.kotlin.compile.testing)
     testImplementation(libs.jackson.databind)
+    testImplementation(libs.jackson.jsr310)
     testImplementation(libs.jackson.kotlin)
     testImplementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotlin.serialization.compiler.plugin)

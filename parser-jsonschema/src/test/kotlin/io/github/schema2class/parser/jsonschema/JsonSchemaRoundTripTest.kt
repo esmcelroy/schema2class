@@ -104,6 +104,10 @@ class JsonSchemaRoundTripTest {
         battery.nullable shouldBe true
         battery.type shouldBe TypeRef.Primitive(PrimitiveType.DOUBLE)
 
+        val recordedAt = root.properties.find { it.schemaName == "recordedAt" }.shouldNotBeNull()
+        recordedAt.nullable shouldBe false
+        recordedAt.type shouldBe TypeRef.Primitive(PrimitiveType.DATE_TIME)
+
         val readings = root.properties.find { it.schemaName == "readings" }.shouldNotBeNull()
         readings.type shouldBe TypeRef.ListOf(TypeRef.Named("Reading"))
         readings.nullable shouldBe false
@@ -124,6 +128,7 @@ class JsonSchemaRoundTripTest {
         val payload = sources.getValue("com/example/telemetry/TelemetryPayload.kt")
         payload shouldContain "data class TelemetryPayload("
         payload shouldContain "val deviceId: String"
+        payload shouldContain "val recordedAt: OffsetDateTime"
         payload shouldContain "val battery: Double? = null"
         payload shouldContain "List<Reading>"
     }
