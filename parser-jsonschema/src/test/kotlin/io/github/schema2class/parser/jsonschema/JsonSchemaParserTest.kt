@@ -283,6 +283,43 @@ class JsonSchemaParserTest {
     }
 
     @Test
+    fun `string default value is emitted as a kotlin-safe literal`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string", "default": "${'$'}{{ github.token }}\\path" }
+              }
+            }
+            """
+        )
+        val rootType = model.types.filterIsInstance<TypeDefinition.ComplexType>().first()
+        val prop = rootType.properties.find { it.schemaName == "token" }.shouldNotBeNull()
+        prop.defaultValue shouldBe "\"\\${'$'}{{ github.token }}\\\\path\""
+    }
+
+    @Test
+    fun `non-scalar default values are skipped`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "tags": { "type": "array", "default": [] },
+                "config": { "type": "object", "default": { "enabled": true } }
+              }
+            }
+            """
+        )
+        val rootType = model.types.filterIsInstance<TypeDefinition.ComplexType>().first()
+        rootType.properties.find { it.schemaName == "tags" }.shouldNotBeNull()
+            .defaultValue shouldBe null
+        rootType.properties.find { it.schemaName == "config" }.shouldNotBeNull()
+            .defaultValue shouldBe null
+    }
+
+    @Test
     fun `string constraints are captured`() {
         val model = parse(
             """

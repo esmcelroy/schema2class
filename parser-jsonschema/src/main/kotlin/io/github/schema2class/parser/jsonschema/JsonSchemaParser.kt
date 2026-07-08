@@ -375,11 +375,11 @@ private class ParseContext(
             val propKotlinName = toCamelCase(propSchemaName)
             val nullable = propSchemaName !in required
             val propDoc = extractDoc(propNode)
-            val defaultValue = propNode.get("default")?.toString()
             val constraints = extractConstraints(propNode)
             // Suggested name for anonymous inline types: ParentType_propertyName
             val suggestedTypeName = "${schemaName}_${propSchemaName}"
             val typeRef = resolveTypeRef(propNode, suggestedTypeName)
+            val defaultValue = kotlinDefaultLiteral(propNode.get("default"), propSchemaName)
 
             PropertyDefinition(
                 schemaName = propSchemaName,
@@ -555,6 +555,47 @@ private class ParseContext(
             // TODO v1: format keyword (date, date-time, etc.) — treated as STRING
             else -> TypeRef.Primitive(PrimitiveType.ANY)
         }
+    }
+
+    fun kotlinDefaultLiteral(defaultNode: JsonNode?, propSchemaName: String): String? {
+        if (defaultNode == null) return null
+        return when {
+            defaultNode.isTextual -> quoteKotlinString(defaultNode.textValue())
+            defaultNode.isNumber || defaultNode.isBoolean || defaultNode.isNull -> defaultNode.toString()
+            else -> {
+                System.err.println(
+                    "Warning: skipping non-scalar default for JSON Schema property '$propSchemaName'",
+                )
+                null
+            }
+        }
+    }
+
+    private fun quoteKotlinString(value: String): String = buildString {
+        append('"')
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '$' -> {
+                    append('\\')
+                    append('$')
+                }
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                '\b' -> append("\\b")
+                else -> {
+                    if (ch < ' ') {
+                        append("\\u")
+                        append(ch.code.toString(16).padStart(4, '0'))
+                    } else {
+                        append(ch)
+                    }
+                }
+            }
+        }
+        append('"')
     }
 
     fun inferEnumBaseType(node: JsonNode): PrimitiveType {

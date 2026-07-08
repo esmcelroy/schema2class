@@ -66,9 +66,8 @@ class JsonSchemaRoundTripTest {
             assert(!source.contains(Regex("""data class \w+\(\s*\)"""))) {
                 "$path contains a data class with an empty constructor:\n$source"
             }
-            // A bare $ outside a string template is either an injection from a schema
-            // default value or broken escaping — never legitimate in generated code
-            assert(!source.contains(Regex("""\$\{\{"""))) {
+            // An unescaped ${{ from a schema default would become a string template.
+            assert(!source.contains(Regex("""(?<!\\)\$\{\{"""))) {
                 "$path contains an unescaped template injection:\n$source"
             }
         }
@@ -157,6 +156,26 @@ class JsonSchemaRoundTripTest {
 
         val reading = sources.getValue("com/example/telemetry/Reading.kt")
         reading shouldContain "val unit: String? = \"celsius\""
+    }
+
+    @Test
+    fun `string default value with dollar sign round-trips as escaped kotlin literal`() {
+        val model = parser.parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string", "default": "${'$'}{{ github.token }}" }
+              }
+            }
+            """.trimIndent().byteInputStream(),
+            "com.example.defaults",
+        )
+        val sources = codegen.generate(model)
+        assertSourcesWellFormed(sources, "com.example.defaults")
+
+        val root = sources.getValue("com/example/defaults/Root.kt")
+        root shouldContain "val token: String? = \"\\${'$'}{{ github.token }}\""
     }
 
     // ── Recursive schema ──────────────────────────────────────────────────────
