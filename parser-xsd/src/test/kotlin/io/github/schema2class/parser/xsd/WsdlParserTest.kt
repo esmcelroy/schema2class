@@ -5,6 +5,7 @@ import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
 import io.github.schema2class.core.naming.NamespacePackageMapper
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -71,5 +72,28 @@ class WsdlParserTest {
         }
 
         error.message.shouldNotBeNull() shouldBe "WSDL document contains no xs:schema children under wsdl:types"
+    }
+
+    @Test
+    fun `doctype declarations are rejected`() {
+        shouldThrowAny {
+            parser.parse(
+                """
+                <!DOCTYPE wsdl:definitions [
+                  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+                ]>
+                <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                                  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <wsdl:types>
+                    <xs:schema>
+                      <xs:annotation>
+                        <xs:documentation>&xxe;</xs:documentation>
+                      </xs:annotation>
+                    </xs:schema>
+                  </wsdl:types>
+                </wsdl:definitions>
+                """.trimIndent().byteInputStream(),
+            )
+        }
     }
 }

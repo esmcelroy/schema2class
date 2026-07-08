@@ -3,6 +3,9 @@ package io.github.schema2class.gradle
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.assertions.throwables.shouldThrow
+import org.gradle.api.GradleException
+import org.gradle.testfixtures.ProjectBuilder
 import org.gradle.testkit.runner.GradleRunner
 import org.gradle.testkit.runner.TaskOutcome
 import org.junit.jupiter.api.Test
@@ -138,5 +141,67 @@ class Schema2ClassPluginFunctionalTest {
 
         val result = runner("schema2classGenerate").buildAndFail()
         result.output shouldContain "requires packageName"
+    }
+
+    @Test
+    fun `output directory outside build directory fails before cleanup`() {
+        writeProject(
+            """
+            plugins { id 'io.github.schema2class' }
+
+            schema2class {
+                outputDirectory = layout.projectDirectory.dir('generated')
+                schemas {
+                    envelope { source = file('schemas/envelope.xsd') }
+                }
+            }
+            """.trimIndent(),
+        )
+        val existingFile = File(projectDir, "generated/keep.txt").apply {
+            parentFile.mkdirs()
+            writeText("do not delete")
+        }
+
+        val result = runner("schema2classGenerate").buildAndFail()
+
+        result.output shouldContain "outputDirectory must be inside the project build directory"
+        existingFile.readText() shouldBe "do not delete"
+    }
+
+    @Test
+    fun `task rejects output directory outside build directory before cleanup`() {
+        val project = ProjectBuilder.builder().withProjectDir(projectDir).build()
+        val task = project.tasks.register("generate", Schema2ClassGenerateTask::class.java).get()
+        val existingFile = File(projectDir, "generated/keep.txt").apply {
+            parentFile.mkdirs()
+            writeText("do not delete")
+        }
+        task.outputDirectory.set(project.layout.projectDirectory.dir("generated"))
+        task.specs.set(emptyList())
+
+        val error = shouldThrow<GradleException> {
+            task.generate()
+        }
+
+        error.message.shouldNotBeNull() shouldContain "outputDirectory must be inside the project build directory"
+        existingFile.readText() shouldBe "do not delete"
+    }
+
+    @Test
+    fun `task cleans output directory inside build directory`() {
+        val project = ProjectBuilder.builder().withProjectDir(projectDir).build()
+        val task = project.tasks.register("generate", Schema2ClassGenerateTask::class.java).get()
+        val outputDir = File(projectDir, "build/generated/schema2class/kotlin")
+        val staleFile = File(outputDir, "stale.txt").apply {
+            parentFile.mkdirs()
+            writeText("stale")
+        }
+        task.outputDirectory.set(project.layout.buildDirectory.dir("generated/schema2class/kotlin"))
+        task.specs.set(emptyList())
+
+        task.generate()
+
+        outputDir.isDirectory shouldBe true
+        staleFile.exists() shouldBe false
     }
 }

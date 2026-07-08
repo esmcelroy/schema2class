@@ -82,37 +82,43 @@ class GenerateCommand : CliktCommand(
                 generateValueClasses = valueClasses,
             ),
         )
-        var fileCount = 0
-
-        for (input in inputs) {
-            if (!input.file.isFile) {
-                throw UsageError("schema file not found: ${input.file}")
-            }
-            val models: List<SchemaModel> = when (input.file.extension.lowercase()) {
-                "xsd" -> parseXsd(input)
-                "json" -> listOf(parseJsonSchema(input))
-                "wsdl" -> parseWsdl(input)
-                "dtd", "rng", "rnc" -> throw UsageError(
-                    "schema2class does not parse ${input.file.extension} directly; " +
-                        "convert it to XSD with trang first (see docs/trang-conversion.md)",
-                )
-                else -> throw UsageError(
-                    "cannot detect schema format of '${input.file.name}': expected .xsd, .wsdl, or .json",
-                )
-            }
-            for (model in models) {
-                for ((relativePath, content) in codegen.generate(model)) {
-                    File(output, relativePath).apply {
-                        parentFile.mkdirs()
-                        writeText(content)
-                    }
-                    fileCount++
-                }
-            }
-        }
+        val fileCount = inputs.sumOf { generate(input = it, codegen = codegen) }
 
         echo("schema2class: generated $fileCount file(s) into $output")
     }
+
+    private fun generate(input: SchemaInput, codegen: KotlinCodegen): Int {
+        requireInputFile(input)
+        return parseModels(input).sumOf { writeModel(it, codegen) }
+    }
+
+    private fun requireInputFile(input: SchemaInput) {
+        if (!input.file.isFile) {
+            throw UsageError("schema file not found: ${input.file}")
+        }
+    }
+
+    private fun parseModels(input: SchemaInput): List<SchemaModel> =
+        when (input.file.extension.lowercase()) {
+            "xsd" -> parseXsd(input)
+            "json" -> listOf(parseJsonSchema(input))
+            "wsdl" -> parseWsdl(input)
+            "dtd", "rng", "rnc" -> throw UsageError(
+                "schema2class does not parse ${input.file.extension} directly; " +
+                    "convert it to XSD with trang first (see docs/trang-conversion.md)",
+            )
+            else -> throw UsageError(
+                "cannot detect schema format of '${input.file.name}': expected .xsd, .wsdl, or .json",
+            )
+        }
+
+    private fun writeModel(model: SchemaModel, codegen: KotlinCodegen): Int =
+        codegen.generate(model).onEach { (relativePath, content) ->
+            File(output, relativePath).apply {
+                parentFile.mkdirs()
+                writeText(content)
+            }
+        }.size
 
     private fun parseXsd(input: SchemaInput): List<SchemaModel> =
         if (input.packageName != null) {

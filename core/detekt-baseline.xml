@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MagicNumber:NamespacePackageMapper.kt$NamespacePackageMapper$4</ID>
+    <ID>MaxLineLength:SchemaModelTest.kt$SchemaModelTest$EnumValue(serializedValue = "1", kotlinName = "ADDED", documentation = "The information is to be or has been added.")</ID>
+    <ID>MaxLineLength:SchemaModelTest.kt$SchemaModelTest$EnumValue(serializedValue = "100", kotlinName = "FINAL_RESPONSE", documentation = "The response is a final one.")</ID>
+    <ID>MaxLineLength:SchemaModelTest.kt$SchemaModelTest$EnumValue(serializedValue = "2", kotlinName = "DELETED", documentation = "The information is to be or has been deleted.")</ID>
+    <ID>ReturnCount:InheritanceFlattener.kt$InheritanceFlattener$fun flattenType( type: TypeDefinition.ComplexType, visiting: MutableSet&lt;TypeDefinition.ComplexType&gt;, ): TypeDefinition.ComplexType</ID>
+    <ID>ReturnCount:NamespacePackageMapper.kt$NamespacePackageMapper$fun toPackage(namespace: String?): String</ID>
+  </CurrentIssues>
+</SmellBaseline>

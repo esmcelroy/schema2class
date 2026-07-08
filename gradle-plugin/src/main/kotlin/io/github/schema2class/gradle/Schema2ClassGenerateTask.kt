@@ -31,9 +31,7 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDirectory.get().asFile
-        outDir.deleteRecursively()
-        outDir.mkdirs()
+        val outDir = prepareOutputDirectory(outputDirectory.get().asFile)
 
         for (spec in specs.get()) {
             val source = spec.source.get().asFile
@@ -64,6 +62,23 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
                 }
             }
         }
+    }
+
+    private fun prepareOutputDirectory(outDir: File): File {
+        val buildDir = project.layout.buildDirectory.get().asFile.canonicalFile
+        val canonicalOutDir = outDir.canonicalFile
+        val buildDirPrefix = buildDir.path + File.separator
+
+        if (canonicalOutDir == buildDir || !canonicalOutDir.path.startsWith(buildDirPrefix)) {
+            throw GradleException(
+                "schema2class: outputDirectory must be inside the project build directory " +
+                    "so generated files can be cleaned safely: $outDir",
+            )
+        }
+
+        canonicalOutDir.deleteRecursively()
+        canonicalOutDir.mkdirs()
+        return canonicalOutDir
     }
 
     private fun parseXsd(spec: SchemaSpec, source: File): List<SchemaModel> {

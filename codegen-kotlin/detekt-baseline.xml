@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:KotlinCodegen.kt$KotlinCodegen$private fun generateComplexType( type: TypeDefinition.ComplexType, packageName: String, namespace: String?, sourceFormat: SourceFormat, ): TypeSpec</ID>
+    <ID>LargeClass:KotlinCodegenTest.kt$KotlinCodegenTest</ID>
+    <ID>ReturnCount:KotlinCodegen.kt$KotlinCodegen$private fun TypeName.withContextualIfNeeded( ref: TypeRef, ownerClassName: ClassName? = null, ): TypeName</ID>
+    <ID>TooManyFunctions:KotlinCodegen.kt$KotlinCodegen</ID>
+  </CurrentIssues>
+</SmellBaseline>

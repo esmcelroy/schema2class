@@ -15,7 +15,6 @@ import io.github.schema2class.core.naming.NamespacePackageMapper
 import org.w3c.dom.Element
 import java.io.File
 import java.io.InputStream
-import javax.xml.parsers.DocumentBuilderFactory
 
 internal const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
@@ -124,8 +123,7 @@ class XsdParser {
     }
 
     private fun parseDocument(inputStream: InputStream): Element {
-        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-        return factory.newDocumentBuilder().parse(inputStream).documentElement
+        return SecureXml.parseDocument(inputStream)
     }
 
     private fun targetNamespaceOf(root: Element): String? =

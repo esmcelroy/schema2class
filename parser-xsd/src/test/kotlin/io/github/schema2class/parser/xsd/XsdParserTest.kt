@@ -5,6 +5,7 @@ import io.github.schema2class.core.ir.PrimitiveType
 import io.github.schema2class.core.ir.SourceFormat
 import io.github.schema2class.core.ir.TypeDefinition
 import io.github.schema2class.core.ir.TypeRef
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -38,6 +39,24 @@ class XsdParserTest {
             """
         )
         model.namespace shouldBe "urn:example:foo"
+    }
+
+    @Test
+    fun `doctype declarations are rejected`() {
+        shouldThrowAny {
+            parse(
+                """
+                <!DOCTYPE xs:schema [
+                  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+                ]>
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:annotation>
+                    <xs:documentation>&xxe;</xs:documentation>
+                  </xs:annotation>
+                </xs:schema>
+                """,
+            )
+        }
     }
 
     // ── Test 3: simpleType with string enum ───────────────────────────────────

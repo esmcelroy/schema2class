@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:JsonSchemaParser.kt$ParseContext$node.has("properties") || node.has("\$ref") || node.has("enum") || node.has("oneOf") || node.has("anyOf") || node.has("allOf")</ID>
+    <ID>CyclomaticComplexMethod:JsonSchemaParser.kt$ParseContext$fun dictionaryValueSchema(node: JsonNode): JsonNode?</ID>
+    <ID>MagicNumber:JsonSchemaParser.kt$ParseContext$16</ID>
+    <ID>MagicNumber:JsonSchemaParser.kt$ParseContext$4</ID>
+    <ID>MaxLineLength:JsonSchemaParserTest.kt$JsonSchemaParserTest$val refVariant = unionType.variants.find { it.type == TypeRef.Named("Mystring") || it.type == TypeRef.Named("MyString") }</ID>
+    <ID>ReturnCount:JsonSchemaParser.kt$ParseContext$fun dictionaryValueSchema(node: JsonNode): JsonNode?</ID>
+    <ID>ReturnCount:JsonSchemaParser.kt$ParseContext$fun resolveRef(refPath: String): JsonNode?</ID>
+    <ID>ReturnCount:JsonSchemaParser.kt$ParseContext$fun resolveRefToTypeRef(refPath: String): TypeRef</ID>
+    <ID>ReturnCount:JsonSchemaParser.kt$internal fun toScreamingSnakeCase(value: String): String</ID>
+    <ID>TooManyFunctions:JsonSchemaParser.kt$ParseContext</ID>
+  </CurrentIssues>
+</SmellBaseline>

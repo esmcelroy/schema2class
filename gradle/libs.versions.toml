@@ -8,6 +8,8 @@ kotest = "5.9.1"
 kotlin-compile-testing = "1.6.0"
 kotlinx-serialization = "1.6.3"
 xmlutil = "0.86.3"
+detekt = "1.23.8"
+jacoco = "0.8.13"
 
 [libraries]
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -27,3 +29,4 @@ xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

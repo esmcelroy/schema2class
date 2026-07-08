@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:XsdParser.kt$XsdParser.ParseContext$fun parse(): SchemaModel</ID>
+    <ID>CyclomaticComplexMethod:XsdParser.kt$XsdParser.ParseContext$private fun buildElementProperty(el: Element, parentTypeName: String): PropertyDefinition</ID>
+    <ID>CyclomaticComplexMethod:XsdParser.kt$XsdParser.ParseContext$private fun builtinToPrimitive(localName: String): PrimitiveType?</ID>
+    <ID>CyclomaticComplexMethod:XsdParser.kt$XsdParser.ParseContext$private fun collectElementProperties( particle: Element, parentTypeName: String, insideChoice: Boolean = false, visitedGroups: MutableSet&lt;String&gt; = mutableSetOf(), ): List&lt;PropertyDefinition&gt;</ID>
+    <ID>LargeClass:XsdParserTest.kt$XsdParserTest</ID>
+    <ID>LoopWithTooManyJumpStatements:WsdlParser.kt$WsdlParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:XsdParser.kt$XsdParser.ParseContext$for</ID>
+    <ID>MagicNumber:XsdParser.kt$XsdParser.ParseContext$16</ID>
+    <ID>MagicNumber:XsdParser.kt$XsdParser.ParseContext$4</ID>
+    <ID>MaxLineLength:WsdlParser.kt$WsdlParser$fun</ID>
+    <ID>MaxLineLength:XsdParser.kt$XsdParser.ParseContext$if</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun collectElementProperties( particle: Element, parentTypeName: String, insideChoice: Boolean = false, visitedGroups: MutableSet&lt;String&gt; = mutableSetOf(), ): List&lt;PropertyDefinition&gt;</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun distinguishableUnionVariants(memberRefs: List&lt;TypeRef&gt;): List&lt;UnionVariant&gt;?</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun extractTypeDoc(el: Element): String?</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun isUnionMappableChoice(particle: Element): Boolean</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun processSimpleType(el: Element, schemaName: String)</ID>
+    <ID>ReturnCount:XsdParser.kt$XsdParser.ParseContext$private fun resolveTypeRef(qname: String, context: Element): TypeRef</ID>
+    <ID>TooManyFunctions:XsdParser.kt$XsdParser$ParseContext</ID>
+  </CurrentIssues>
+</SmellBaseline>

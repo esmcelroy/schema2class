@@ -5,7 +5,6 @@ import io.github.schema2class.core.naming.NamespacePackageMapper
 import org.w3c.dom.Element
 import java.io.File
 import java.io.InputStream
-import javax.xml.parsers.DocumentBuilderFactory
 
 private const val WSDL_NS = "http://schemas.xmlsoap.org/wsdl/"
 private const val WSDL20_NS = "http://www.w3.org/ns/wsdl"
@@ -29,8 +28,7 @@ class WsdlParser(
         file.inputStream().use { parse(it, packageMapper) }
 
     private fun parseDocument(inputStream: InputStream): Element {
-        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-        return factory.newDocumentBuilder().parse(inputStream).documentElement
+        return SecureXml.parseDocument(inputStream)
     }
 
     private fun schemaRoots(root: Element): List<Element> {
