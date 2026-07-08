@@ -622,6 +622,9 @@ class KotlinCodegenTest {
         source shouldContain "namespace = \"urn:test:business-doc\""
         source shouldContain "@XmlValue"
         source shouldContain "@XmlElement(false)"
+        source shouldContain "@Serializable(with = Schema2ClassBigDecimalAsStringSerializer::class)"
+        source shouldContain "object Schema2ClassBigDecimalAsStringSerializer : KSerializer<BigDecimal>"
+        source shouldNotContain "@Contextual BigDecimal"
     }
 
     @Test

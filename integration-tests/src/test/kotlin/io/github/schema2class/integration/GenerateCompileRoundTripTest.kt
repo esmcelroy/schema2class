@@ -218,26 +218,23 @@ class GenerateCompileRoundTripTest {
         )
         val result = compile(xmlCodegen.generate(model), withSerializationPlugin = true)
 
-        // TextType is the UNECE simpleContent pattern: string body + attribute.
-        // (A @Contextual content property like AmountType's BigDecimal is not yet
-        // honored as @XmlValue by xmlutil — tracked separately.)
-        val textClass = result.classLoader.loadClass("com.example.xml.TextType")
+        val amountClass = result.classLoader.loadClass("com.example.xml.AmountType")
         val xml = XML()
-        val textSerializer = serializer(textClass)
+        val amountSerializer = serializer(amountClass)
 
         val document =
-            """<TextType xmlns="urn:test:business-doc" languageID="en">Payment overdue</TextType>"""
-        val text = xml.decodeFromString(textSerializer, document).shouldNotBeNull()
+            """<AmountType xmlns="urn:test:business-doc" currencyID="USD">99.95</AmountType>"""
+        val amount = xml.decodeFromString(amountSerializer, document).shouldNotBeNull()
 
         // @XmlValue content property and @XmlElement(false) attribute both mapped
-        textClass.getMethod("getValue").invoke(text) shouldBe "Payment overdue"
-        textClass.getMethod("getLanguageId").invoke(text) shouldBe "en"
+        amountClass.getMethod("getValue").invoke(amount) shouldBe BigDecimal("99.95")
+        amountClass.getMethod("getCurrencyId").invoke(amount) shouldBe "USD"
 
-        // Encode: languageID must come out as an XML attribute, value as text content
-        val encoded = xml.encodeToString(textSerializer, text)
-        encoded shouldContain "languageID=\"en\""
-        encoded shouldContain ">Payment overdue<"
+        // Encode: currencyID must come out as an XML attribute, value as text content
+        val encoded = xml.encodeToString(amountSerializer, amount)
+        encoded shouldContain "currencyID=\"USD\""
+        encoded shouldContain ">99.95<"
 
-        xml.decodeFromString(textSerializer, encoded) shouldBe text
+        xml.decodeFromString(amountSerializer, encoded) shouldBe amount
     }
 }

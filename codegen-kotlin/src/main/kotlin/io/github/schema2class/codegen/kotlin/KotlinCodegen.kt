@@ -94,6 +94,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         namespace: String?,
     ): TypeSpec {
         val allProps = listOfNotNull(type.contentProperty) + type.properties
+        val ownerClassName = ClassName(packageName, type.kotlinName)
 
         val constructorBuilder = FunSpec.constructorBuilder()
         val typeBuilder = TypeSpec.classBuilder(type.kotlinName)
@@ -111,7 +112,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         // codegen. Emitting `: Parent()` here would not compile.
 
         for (prop in allProps) {
-            val typeName = propertyTypeName(prop, packageName)
+            val typeName = propertyTypeName(prop, packageName, ownerClassName)
             val resolvedTypeName = if (prop.nullable) typeName.copy(nullable = true) else typeName
 
             val paramBuilder = ParameterSpec.builder(prop.kotlinName, resolvedTypeName)
@@ -133,6 +134,12 @@ class KotlinCodegen(private val options: Options = Options()) {
             }
             prop.documentation?.let { propBuilder.addKdoc("%L", it) }
             typeBuilder.addProperty(propBuilder.build())
+        }
+
+        if (xmlMode) {
+            allProps.flatMap { it.type.contextualPrimitiveTypes() }
+                .distinct()
+                .forEach { typeBuilder.addType(stringSerializerType(it)) }
         }
 
         if (allProps.isNotEmpty()) {
@@ -284,28 +291,45 @@ class KotlinCodegen(private val options: Options = Options()) {
         PropertyKind.CONTENT -> AnnotationSpec.builder(XML_VALUE).build()
     }
 
-    private fun propertyTypeName(prop: PropertyDefinition, packageName: String): TypeName =
-        prop.type.toKotlinTypeName(packageName).withContextualIfNeeded(prop.type)
+    private fun propertyTypeName(
+        prop: PropertyDefinition,
+        packageName: String,
+        ownerClassName: ClassName,
+    ): TypeName =
+        prop.type.toKotlinTypeName(packageName).withContextualIfNeeded(prop.type, ownerClassName)
 
     /**
      * Attaches @Contextual to java.math/java.time types (or the element type of a list
-     * of them) — kotlinx.serialization has no built-in serializers for those.
+     * of them) — kotlinx.serialization has no built-in serializers for those. In
+     * XMLUTIL mode, use generated string serializers so @XmlValue remains text.
      */
-    private fun TypeName.withContextualIfNeeded(ref: TypeRef): TypeName {
+    private fun TypeName.withContextualIfNeeded(
+        ref: TypeRef,
+        ownerClassName: ClassName? = null,
+    ): TypeName {
         if (!annotate) return this
         return when (ref) {
             is TypeRef.Primitive ->
-                if (ref.type.needsContextual) copy(annotations = annotations + contextualAnnotation()) else this
+                if (ref.type.needsContextual) {
+                    val annotation = if (xmlMode && ownerClassName != null) {
+                        stringSerializerAnnotation(ownerClassName, ref.type)
+                    } else {
+                        contextualAnnotation()
+                    }
+                    copy(annotations = annotations + annotation)
+                } else {
+                    this
+                }
             is TypeRef.ListOf -> {
                 if (this !is com.squareup.kotlinpoet.ParameterizedTypeName) return this
-                val element = typeArguments.single().withContextualIfNeeded(ref.element)
+                val element = typeArguments.single().withContextualIfNeeded(ref.element, ownerClassName)
                 rawType.parameterizedBy(element)
             }
             is TypeRef.MapOf -> {
                 if (this !is com.squareup.kotlinpoet.ParameterizedTypeName) return this
                 rawType.parameterizedBy(
-                    typeArguments[0].withContextualIfNeeded(ref.key),
-                    typeArguments[1].withContextualIfNeeded(ref.value),
+                    typeArguments[0].withContextualIfNeeded(ref.key, ownerClassName),
+                    typeArguments[1].withContextualIfNeeded(ref.value, ownerClassName),
                 )
             }
             is TypeRef.Named -> this
@@ -321,6 +345,72 @@ class KotlinCodegen(private val options: Options = Options()) {
         }
 
     private fun contextualAnnotation(): AnnotationSpec = AnnotationSpec.builder(CONTEXTUAL).build()
+
+    private fun stringSerializerAnnotation(ownerClassName: ClassName, type: PrimitiveType): AnnotationSpec =
+        AnnotationSpec.builder(SERIALIZABLE)
+            .addMember("with = %T::class", ownerClassName.nestedClass(serializerObjectName(type)))
+            .build()
+
+    private fun TypeRef.contextualPrimitiveTypes(): Set<PrimitiveType> = when (this) {
+        is TypeRef.Primitive -> if (type.needsContextual) setOf(type) else emptySet()
+        is TypeRef.ListOf -> element.contextualPrimitiveTypes()
+        is TypeRef.MapOf -> key.contextualPrimitiveTypes() + value.contextualPrimitiveTypes()
+        is TypeRef.Named -> emptySet()
+    }
+
+    private fun serializerObjectName(type: PrimitiveType): String = when (type) {
+        PrimitiveType.DECIMAL -> "Schema2ClassBigDecimalAsStringSerializer"
+        PrimitiveType.DATE -> "Schema2ClassLocalDateAsStringSerializer"
+        PrimitiveType.DATE_TIME -> "Schema2ClassOffsetDateTimeAsStringSerializer"
+        PrimitiveType.DURATION -> "Schema2ClassDurationAsStringSerializer"
+        else -> error("No generated string serializer for $type")
+    }
+
+    private fun stringSerializerType(type: PrimitiveType): TypeSpec {
+        val targetType = primitiveToTypeName(type)
+        val serialName = "io.github.schema2class.${serializerObjectName(type)}"
+        val descriptor = PropertySpec.builder("descriptor", SERIAL_DESCRIPTOR)
+            .addModifiers(KModifier.OVERRIDE)
+            .initializer(
+                "%T(%S, %T)",
+                PRIMITIVE_SERIAL_DESCRIPTOR,
+                serialName,
+                PRIMITIVE_KIND_STRING,
+            )
+            .build()
+        val serializeValue = when (type) {
+            PrimitiveType.DECIMAL -> "value.toPlainString()"
+            PrimitiveType.DATE, PrimitiveType.DATE_TIME, PrimitiveType.DURATION -> "value.toString()"
+            else -> error("No generated string serializer for $type")
+        }
+        val deserializeBody = when (type) {
+            PrimitiveType.DECIMAL -> CodeBlock.of("return %T(decoder.decodeString())", targetType)
+            PrimitiveType.DATE, PrimitiveType.DATE_TIME, PrimitiveType.DURATION ->
+                CodeBlock.of("return %T.parse(decoder.decodeString())", targetType)
+            else -> error("No generated string serializer for $type")
+        }
+
+        return TypeSpec.objectBuilder(serializerObjectName(type))
+            .addSuperinterface(K_SERIALIZER.parameterizedBy(targetType))
+            .addProperty(descriptor)
+            .addFunction(
+                FunSpec.builder("serialize")
+                    .addModifiers(KModifier.OVERRIDE)
+                    .addParameter("encoder", ENCODER)
+                    .addParameter("value", targetType)
+                    .addStatement("encoder.encodeString(%L)", serializeValue)
+                    .build(),
+            )
+            .addFunction(
+                FunSpec.builder("deserialize")
+                    .addModifiers(KModifier.OVERRIDE)
+                    .addParameter("decoder", DECODER)
+                    .returns(targetType)
+                    .addCode(deserializeBody)
+                    .build(),
+            )
+            .build()
+    }
 
     // ── Type name resolution ──────────────────────────────────────────────────
 
@@ -357,6 +447,14 @@ class KotlinCodegen(private val options: Options = Options()) {
         val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
         val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
+        val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
+        val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
+        val PRIMITIVE_SERIAL_DESCRIPTOR =
+            ClassName("kotlinx.serialization.descriptors", "PrimitiveSerialDescriptor")
+        val PRIMITIVE_KIND_STRING =
+            ClassName("kotlinx.serialization.descriptors", "PrimitiveKind", "STRING")
+        val ENCODER = ClassName("kotlinx.serialization.encoding", "Encoder")
+        val DECODER = ClassName("kotlinx.serialization.encoding", "Decoder")
         val XML_SERIAL_NAME = ClassName("nl.adaptivity.xmlutil.serialization", "XmlSerialName")
         val XML_ELEMENT = ClassName("nl.adaptivity.xmlutil.serialization", "XmlElement")
         val XML_VALUE = ClassName("nl.adaptivity.xmlutil.serialization", "XmlValue")
