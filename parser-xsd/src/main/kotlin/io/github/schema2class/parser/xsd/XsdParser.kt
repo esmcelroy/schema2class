@@ -17,7 +17,7 @@ import java.io.File
 import java.io.InputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
-private const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
+internal const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
 class XsdParser {
 
@@ -52,6 +52,33 @@ class XsdParser {
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
     ): SchemaModel =
         file.inputStream().use { parse(it, packageMapper) }
+
+    /**
+     * Parses already-extracted xs:schema document roots, grouped by targetNamespace.
+     * Used by thin frontends such as WSDL where schemas are embedded in a larger XML
+     * document. External schemaLocation loading is intentionally left to file-based
+     * [parseWithImports].
+     */
+    fun parseSchemaRoots(
+        roots: List<Element>,
+        packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+    ): List<SchemaModel> {
+        val rootsByNamespace = LinkedHashMap<String?, MutableList<Element>>()
+        for (root in roots) {
+            rootsByNamespace.getOrPut(targetNamespaceOf(root)) { mutableListOf() }.add(root)
+        }
+        val packages = packageMapper.toPackages(rootsByNamespace.keys)
+        val models = rootsByNamespace.map { (namespace, namespaceRoots) ->
+            ParseContext(
+                roots = namespaceRoots,
+                targetNamespace = namespace,
+                packageName = packages.getValue(namespace),
+                packagesByNamespace = packages,
+                fallbackMapper = packageMapper,
+            ).parse()
+        }
+        return InheritanceFlattener.flatten(models)
+    }
 
     /**
      * Parses [file] and everything reachable through xs:include and xs:import, returning

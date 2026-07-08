@@ -15,6 +15,7 @@ import io.github.schema2class.codegen.kotlin.KotlinCodegen
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.naming.NamespacePackageMapper
 import io.github.schema2class.parser.jsonschema.JsonSchemaParser
+import io.github.schema2class.parser.xsd.WsdlParser
 import io.github.schema2class.parser.xsd.XsdParser
 import java.io.File
 
@@ -89,8 +90,9 @@ class GenerateCommand : CliktCommand(
             val models: List<SchemaModel> = when (input.file.extension.lowercase()) {
                 "xsd" -> parseXsd(input)
                 "json" -> listOf(parseJsonSchema(input))
+                "wsdl" -> parseWsdl(input)
                 else -> throw UsageError(
-                    "cannot detect schema format of '${input.file.name}': expected .xsd or .json",
+                    "cannot detect schema format of '${input.file.name}': expected .xsd, .wsdl, or .json",
                 )
             }
             for (model in models) {
@@ -125,5 +127,13 @@ class GenerateCommand : CliktCommand(
                     "--input ${input.file}=com.example.generated",
             )
         return JsonSchemaParser().parse(input.file, packageName)
+    }
+
+    private fun parseWsdl(input: SchemaInput): List<SchemaModel> {
+        val mapper = NamespacePackageMapper(
+            basePackage = input.packageName ?: basePackage,
+            overrides = packageOverrides,
+        )
+        return WsdlParser().parse(input.file, mapper)
     }
 }

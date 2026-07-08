@@ -5,6 +5,7 @@ import io.github.schema2class.codegen.kotlin.KotlinCodegen
 import io.github.schema2class.core.ir.SchemaModel
 import io.github.schema2class.core.naming.NamespacePackageMapper
 import io.github.schema2class.parser.jsonschema.JsonSchemaParser
+import io.github.schema2class.parser.xsd.WsdlParser
 import io.github.schema2class.parser.xsd.XsdParser
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
@@ -47,9 +48,10 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
             val models: List<SchemaModel> = when (source.extension.lowercase()) {
                 "xsd" -> parseXsd(spec, source)
                 "json" -> listOf(parseJsonSchema(spec, source))
+                "wsdl" -> parseWsdl(spec, source)
                 else -> throw GradleException(
                     "schema2class: cannot detect schema format of '${source.name}' " +
-                        "(spec '${spec.name}'): expected a .xsd or .json file",
+                        "(spec '${spec.name}'): expected a .xsd, .wsdl, or .json file",
                 )
             }
 
@@ -80,6 +82,14 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
                 "schema2class: spec '${spec.name}' is a JSON Schema and requires packageName",
             )
         return JsonSchemaParser().parse(source, packageName)
+    }
+
+    private fun parseWsdl(spec: SchemaSpec, source: File): List<SchemaModel> {
+        val mapper = NamespacePackageMapper(
+            basePackage = spec.packageName.orNull,
+            overrides = spec.packageOverrides.get(),
+        )
+        return WsdlParser().parse(source, mapper)
     }
 
     private fun parseAnnotationMode(spec: SchemaSpec): AnnotationMode {

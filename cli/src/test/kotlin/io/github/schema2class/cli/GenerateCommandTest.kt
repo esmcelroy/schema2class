@@ -71,6 +71,34 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `wsdl input generates embedded payload types`() {
+        val wsdl = File(workDir, "service.wsdl").apply {
+            writeText(
+                """
+                <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                                  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <wsdl:types>
+                    <xs:schema targetNamespace="urn:corp:service">
+                      <xs:complexType name="Request">
+                        <xs:sequence>
+                          <xs:element name="id" type="xs:string"/>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:schema>
+                  </wsdl:types>
+                </wsdl:definitions>
+                """.trimIndent(),
+            )
+        }
+        val out = File(workDir, "out")
+
+        val result = cli().test("generate -i ${wsdl.path}=com.acme -o ${out.path}")
+
+        result.statusCode shouldBe 0
+        File(out, "com/acme/corp/service/Request.kt").readText() shouldContain "data class Request"
+    }
+
+    @Test
     fun `package override redirects a namespace`() {
         val xsd = fixture("business-doc.xsd")
         val out = File(workDir, "out")
@@ -101,7 +129,7 @@ class GenerateCommandTest {
         val result = cli().test("generate -i ${bogus.path} -o ${File(workDir, "out").path}")
 
         result.statusCode shouldBe 1
-        result.stderr shouldContain "expected .xsd or .json"
+        result.stderr shouldContain "expected .xsd, .wsdl, or .json"
     }
 
     @Test
