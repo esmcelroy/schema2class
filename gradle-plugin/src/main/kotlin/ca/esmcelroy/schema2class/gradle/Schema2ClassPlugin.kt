@@ -18,6 +18,15 @@ class Schema2ClassPlugin : Plugin<Project> {
             task.outputDirectory.set(extension.outputDirectory)
         }
 
+        project.tasks.register(
+            "schema2classVerifyGenerated",
+            Schema2ClassVerifyGeneratedTask::class.java,
+        ) { task ->
+            task.specs.set(project.provider { extension.schemas.toList() })
+            task.verifyDirectory.set(extension.verifyDirectory)
+            task.workDirectory.set(project.layout.buildDirectory.dir("schema2class/verifyGenerated"))
+        }
+
         // When the Kotlin JVM plugin is present, add the generated sources to the
         // main source set. The Kotlin plugin attaches a "kotlin" SourceDirectorySet
         // extension to each Java source set, so no compile-time dependency on the

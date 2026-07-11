@@ -104,6 +104,82 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `verify generated passes when output is current`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    envelope { source = file('schemas/envelope.xsd') }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val result = runner("schema2classVerifyGenerated").build()
+
+        result.task(":schema2classVerifyGenerated")?.outcome shouldBe TaskOutcome.SUCCESS
+    }
+
+    @Test
+    fun `verify generated fails when output is stale`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    envelope { source = file('schemas/envelope.xsd') }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val generatedFile = File(projectDir, "build/generated/schema2class/kotlin/test/business_doc/AmountType.kt")
+        generatedFile.appendText("\n// stale local edit\n")
+
+        val result = runner("schema2classVerifyGenerated").buildAndFail()
+
+        result.output shouldContain "generated sources are out of date"
+        result.output shouldContain "changed file: test/business_doc/AmountType.kt"
+        generatedFile.readText() shouldContain "// stale local edit"
+    }
+
+    @Test
+    fun `verify generated can compare a checked in directory without mutating it`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                verifyDirectory = layout.projectDirectory.dir('checked-in/generated')
+                schemas {
+                    envelope { source = file('schemas/envelope.xsd') }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val generatedDir = File(projectDir, "build/generated/schema2class/kotlin")
+        val checkedInDir = File(projectDir, "checked-in/generated")
+        generatedDir.copyRecursively(checkedInDir, overwrite = true)
+        val marker = File(checkedInDir, "marker.txt").apply { writeText("extra") }
+
+        val stale = runner("schema2classVerifyGenerated").buildAndFail()
+        stale.output shouldContain "extra file: marker.txt"
+        marker.exists() shouldBe true
+
+        marker.delete()
+        val result = runner("schema2classVerifyGenerated").build()
+        result.task(":schema2classVerifyGenerated")?.outcome shouldBe TaskOutcome.SUCCESS
+        checkedInDir.exists() shouldBe true
+    }
+
+    @Test
     fun `explicit packageName on xsd overrides namespace derivation`() {
         writeProject(
             """

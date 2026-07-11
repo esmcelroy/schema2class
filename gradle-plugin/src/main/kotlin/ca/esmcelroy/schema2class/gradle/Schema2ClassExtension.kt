@@ -20,8 +20,12 @@ abstract class Schema2ClassExtension @Inject constructor(
     /** Where generated sources go. Default: build/generated/schema2class/kotlin */
     abstract val outputDirectory: DirectoryProperty
 
+    /** Directory checked by schema2classVerifyGenerated. Defaults to outputDirectory. */
+    abstract val verifyDirectory: DirectoryProperty
+
     init {
         outputDirectory.convention(layout.buildDirectory.dir("generated/schema2class/kotlin"))
+        verifyDirectory.convention(outputDirectory)
     }
 
     fun schemas(action: Action<NamedDomainObjectContainer<SchemaSpec>>) {

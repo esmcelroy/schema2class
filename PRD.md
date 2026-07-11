@@ -199,6 +199,8 @@ enum class Color { RED, GREEN, BLUE }
       mixed formats, per-input packages, namespace overrides, annotation modes)
 - [x] Source set wiring (generated dir added to the main Kotlin source set when
       the Kotlin JVM plugin is present)
+- [x] Generated-source drift check (`schema2classVerifyGenerated` compares
+      configured generated sources against a fresh build-temp generation)
 
 ### Phase 5 — Quality & Ecosystem
 - [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML) — Jackson
