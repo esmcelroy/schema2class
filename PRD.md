@@ -194,6 +194,7 @@ enum class Color { RED, GREEN, BLUE }
       `default`/`fixed` become Kotlin defaults; fixed values emit guards
 - [x] Friendly generated-name pipeline for JSON Schema: strategy hook, sidecar
       bindings, `x-object-name`/`x-object-type`, and sanitized `title` conventions
+- [x] Optional runtime constraint enforcement via generated `require` guards
 
 ### Phase 4 — Build Tooling
 - [x] Gradle plugin (`schema2classGenerate` task; mixed .xsd/.json specs with

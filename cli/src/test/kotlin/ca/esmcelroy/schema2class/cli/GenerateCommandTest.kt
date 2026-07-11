@@ -128,6 +128,20 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `enforce constraints option emits require guards`() {
+        val json = fixture("telemetry-payload.schema.json")
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${json.path}=com.corp.payload -o ${out.path} --enforce-constraints",
+        )
+
+        result.statusCode shouldBe 0
+        File(out, "com/corp/payload/TelemetryPayload.kt").readText() shouldContain
+            "require(deviceId.length >= 1)"
+    }
+
+    @Test
     fun `name bindings file overrides generated json property names`() {
         val schema = File(workDir, "payload.schema.json").apply {
             writeText(

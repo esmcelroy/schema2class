@@ -24,6 +24,7 @@ internal object Schema2ClassGenerator {
                 annotationMode = parseAnnotationMode(spec),
                 generateValueClasses = spec.valueClasses.get(),
                 omitNulls = spec.omitNulls.get(),
+                enforceConstraints = spec.enforceConstraints.get(),
             ),
         )
         parseModels(spec).forEach { model -> writeModel(codegen, model, outDir) }

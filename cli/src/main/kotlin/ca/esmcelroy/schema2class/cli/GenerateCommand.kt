@@ -70,6 +70,11 @@ class GenerateCommand : CliktCommand(
         help = "Emit serializer metadata that omits null optional values when supported by the annotation mode",
     ).flag(default = false)
 
+    private val enforceConstraints: Boolean by option(
+        "--enforce-constraints",
+        help = "Emit init require guards for supported schema constraints",
+    ).flag(default = false)
+
     private val packageOverrides: Map<String, String> by option(
         "--package-override",
         metavar = "NAMESPACE=PACKAGE",
@@ -107,6 +112,7 @@ class GenerateCommand : CliktCommand(
                 annotationMode = annotationMode,
                 generateValueClasses = valueClasses,
                 omitNulls = omitNulls,
+                enforceConstraints = enforceConstraints,
             ),
         )
         val fileCount = inputs.sumOf { generate(input = it, codegen = codegen) }

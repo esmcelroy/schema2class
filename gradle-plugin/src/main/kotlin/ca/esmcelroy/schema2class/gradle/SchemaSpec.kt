@@ -72,10 +72,15 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val omitNulls: Property<Boolean>
 
+    /** Emit init require guards for supported schema constraints. */
+    @get:Input
+    abstract val enforceConstraints: Property<Boolean>
+
     init {
         annotationMode.convention("NONE")
         valueClasses.convention(false)
         omitNulls.convention(false)
+        enforceConstraints.convention(false)
         packageOverrides.convention(emptyMap())
         wireNamespaceOverrides.convention(emptyMap())
     }

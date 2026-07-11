@@ -1,5 +1,6 @@
 package ca.esmcelroy.schema2class.codegen.kotlin
 
+import ca.esmcelroy.schema2class.core.ir.Constraint
 import ca.esmcelroy.schema2class.core.ir.EnumValue
 import ca.esmcelroy.schema2class.core.ir.PrimitiveType
 import ca.esmcelroy.schema2class.core.ir.PropertyDefinition
@@ -115,6 +116,110 @@ class KotlinCodegenTest {
         source shouldContain "val enabled: Boolean = true"
         source shouldContain "require(codingType == 1)"
         source shouldContain "require(enabled == true)"
+    }
+
+    @Test
+    fun `ComplexType emits constraint require guards when option is enabled`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Telemetry",
+            kotlinName = "Telemetry",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "confidence",
+                    kotlinName = "confidence",
+                    type = TypeRef.Primitive(PrimitiveType.INT),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    constraints = listOf(Constraint.MinValue("0"), Constraint.MaxValue("15")),
+                ),
+                PropertyDefinition(
+                    schemaName = "label",
+                    kotlinName = "label",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                    constraints = listOf(Constraint.MinLength(2), Constraint.Pattern("[A-Z]+")),
+                ),
+                PropertyDefinition(
+                    schemaName = "readings",
+                    kotlinName = "readings",
+                    type = TypeRef.ListOf(TypeRef.Primitive(PrimitiveType.INT)),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    constraints = listOf(Constraint.MinItems(1), Constraint.MaxItems(3)),
+                ),
+            ),
+        )
+        val guardedCodegen = KotlinCodegen(KotlinCodegen.Options(enforceConstraints = true))
+
+        val source = sourceFor(guardedCodegen.generate(model(type)), "Telemetry")
+
+        source shouldContain "require(confidence >= 0)"
+        source shouldContain "require(confidence <= 15)"
+        source shouldContain "require(label == null || (label.length >= 2))"
+        source shouldContain "require(label == null || (label.matches(\"[A-Z]+\".toRegex())))"
+        source shouldContain "require(readings.size >= 1)"
+        source shouldContain "require(readings.size <= 3)"
+        source shouldContain "property 'confidence' violates minimum 0"
+    }
+
+    @Test
+    fun `ComplexType emits alias constraint guards when option is enabled`() {
+        val alias = TypeDefinition.AliasType(
+            schemaName = "Identifier",
+            kotlinName = "Identifier",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+            constraints = listOf(Constraint.MaxLength(12)),
+        )
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Record",
+            kotlinName = "Record",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "id",
+                    kotlinName = "id",
+                    type = TypeRef.Named("Identifier"),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val guardedCodegen = KotlinCodegen(KotlinCodegen.Options(enforceConstraints = true))
+
+        val source = sourceFor(guardedCodegen.generate(model(alias, type)), "Record")
+
+        source shouldContain "require(id.length <= 12)"
+    }
+
+    @Test
+    fun `ComplexType skips constraint guards by default`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Telemetry",
+            kotlinName = "Telemetry",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "confidence",
+                    kotlinName = "confidence",
+                    type = TypeRef.Primitive(PrimitiveType.INT),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    constraints = listOf(Constraint.MinValue("0")),
+                ),
+            ),
+        )
+
+        val source = sourceFor(generate(type), "Telemetry")
+
+        source shouldNotContain "require(confidence >= 0)"
     }
 
     // -----------------------------------------------------------------------

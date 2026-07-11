@@ -71,3 +71,4 @@ val receivedPayload = Json.decodeFromString<TelemetryPayload>(received.payload)
 | `nameBindings` | ignored today | optional sidecar file for friendly generated names; see `docs/naming-bindings.md` |
 | `annotationMode` | `NONE` / `KOTLINX_SERIALIZATION` / `XMLUTIL` / `JACKSON` | same (XMLUTIL adds no value for JSON) |
 | `omitNulls` | in `JACKSON` mode emits class-level `@JsonInclude(JsonInclude.Include.NON_NULL)` | same; in kotlinx modes, pair nullable defaults with `Json { encodeDefaults = false }` |
+| `enforceConstraints` | emits `require` guards for supported ranges, lengths, patterns, and list cardinality | same |

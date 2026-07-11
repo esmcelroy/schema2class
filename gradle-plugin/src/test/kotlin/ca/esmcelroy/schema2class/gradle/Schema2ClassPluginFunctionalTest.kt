@@ -156,6 +156,29 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `enforceConstraints emits require guards`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    payload {
+                        source = file('schemas/payload.schema.json')
+                        packageName = 'com.corp.payload'
+                        enforceConstraints = true
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
+            .readText() shouldContain "require(deviceId.length >= 1)"
+    }
+
+    @Test
     fun `verify generated passes when output is current`() {
         writeProject(
             """
