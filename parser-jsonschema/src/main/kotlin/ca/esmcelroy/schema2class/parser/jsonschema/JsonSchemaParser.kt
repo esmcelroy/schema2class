@@ -13,6 +13,10 @@ import ca.esmcelroy.schema2class.core.ir.SourceFormat
 import ca.esmcelroy.schema2class.core.ir.TypeDefinition
 import ca.esmcelroy.schema2class.core.ir.TypeRef
 import ca.esmcelroy.schema2class.core.ir.UnionVariant
+import ca.esmcelroy.schema2class.core.naming.NamingBindings
+import ca.esmcelroy.schema2class.core.naming.NamingContext
+import ca.esmcelroy.schema2class.core.naming.NamingStrategy
+import ca.esmcelroy.schema2class.core.naming.NamingTarget
 import java.io.File
 import java.io.InputStream
 
@@ -25,13 +29,21 @@ import java.io.InputStream
  * - Unknown JSON Schema `format` keywords — treated as plain STRING
  * - `$defs` is treated identically to `definitions`
  */
-class JsonSchemaParser {
+class JsonSchemaParser(
+    private val namingStrategy: NamingStrategy? = null,
+    private val namingBindings: NamingBindings = NamingBindings.EMPTY,
+) {
 
     private val mapper = ObjectMapper().registerKotlinModule()
 
     /** Parse JSON Schema from [input] stream; assigns types to [packageName]. */
     fun parse(input: InputStream, packageName: String): SchemaModel =
-        ParseContext(packageName, mapper.readTree(input)).parse()
+        ParseContext(
+            packageName = packageName,
+            root = mapper.readTree(input),
+            namingStrategy = namingStrategy,
+            namingBindings = namingBindings,
+        ).parse()
 
     /** Convenience overload for [File] inputs. */
     fun parse(file: File, packageName: String): SchemaModel =
@@ -97,7 +109,13 @@ class JsonSchemaParser {
             }
 
             val root = doc.inputStream().use { mapper.readTree(it) }
-            models[doc.path] = ParseContext(packageFor(doc), root, resolver).parse()
+            models[doc.path] = ParseContext(
+                packageName = packageFor(doc),
+                root = root,
+                externalResolver = resolver,
+                namingStrategy = namingStrategy,
+                namingBindings = namingBindings,
+            ).parse()
         }
 
         return models.values.toList()
@@ -122,6 +140,8 @@ private class ParseContext(
     val root: JsonNode,
     /** Resolves external (non-`#`) refs in multi-document parses; null = warn and degrade. */
     val externalResolver: ((String) -> TypeRef)? = null,
+    val namingStrategy: NamingStrategy? = null,
+    val namingBindings: NamingBindings = NamingBindings.EMPTY,
 ) {
     val types = mutableListOf<TypeDefinition>()
 
@@ -176,7 +196,7 @@ private class ParseContext(
     fun processDefinition(schemaName: String, node: JsonNode) {
         if (types.any { it.schemaName == schemaName }) return
 
-        val kotlinName = toPascalCase(schemaName)
+        val kotlinName = typeKotlinName(schemaName, node)
         val doc = extractDoc(node)
 
         when {
@@ -256,21 +276,21 @@ private class ParseContext(
                 if (types.none { it.schemaName == suggestedName }) {
                     processDefinition(suggestedName, node)
                 }
-                TypeRef.Named(toPascalCase(suggestedName))
+                TypeRef.Named(kotlinNameForSchemaName(suggestedName))
             }
 
             node.has("oneOf") || node.has("anyOf") -> {
                 if (types.none { it.schemaName == suggestedName }) {
                     processDefinition(suggestedName, node)
                 }
-                TypeRef.Named(toPascalCase(suggestedName))
+                TypeRef.Named(kotlinNameForSchemaName(suggestedName))
             }
 
             schemaTypeValue(node) == "object" || node.has("properties") -> {
                 if (types.none { it.schemaName == suggestedName }) {
                     processDefinition(suggestedName, node)
                 }
-                TypeRef.Named(toPascalCase(suggestedName))
+                TypeRef.Named(kotlinNameForSchemaName(suggestedName))
             }
 
             schemaTypeValue(node) == "array" -> {
@@ -311,7 +331,7 @@ private class ParseContext(
         val defName = defNameFromRef(refPath)
             ?: return TypeRef.Primitive(PrimitiveType.ANY) // bare "#" pointing to root schema
 
-        val kotlinName = toPascalCase(defName)
+        val kotlinName = kotlinNameForSchemaName(defName)
 
         if (refPath in resolvedRefs) {
             // Cycle detected — return Named without recursing further.
@@ -327,7 +347,7 @@ private class ParseContext(
             resolvedRefs.remove(refPath)
         }
 
-        return TypeRef.Named(kotlinName)
+        return TypeRef.Named(kotlinNameForSchemaName(defName))
     }
 
     /** Resolve a JSON Pointer ref to a [JsonNode] within this document. */
@@ -372,13 +392,13 @@ private class ParseContext(
             ?: return TypeDefinition.ComplexType(schemaName, kotlinName, doc, emptyList())
 
         val properties = propsNode.fields().asSequence().map { (propSchemaName, propNode) ->
-            val propKotlinName = toCamelCase(propSchemaName)
             val nullable = propSchemaName !in required
             val propDoc = extractDoc(propNode)
             val constraints = extractConstraints(propNode)
             // Suggested name for anonymous inline types: ParentType_propertyName
             val suggestedTypeName = "${schemaName}_${propSchemaName}"
             val typeRef = resolveTypeRef(propNode, suggestedTypeName)
+            val propKotlinName = propertyKotlinName(schemaName, kotlinName, propSchemaName, propNode, typeRef)
             val defaultValue = kotlinDefaultLiteral(propNode.get("default"), propSchemaName)
             val fixedValue = kotlinDefaultLiteral(propNode.get("const"), propSchemaName)
 
@@ -392,9 +412,101 @@ private class ParseContext(
                 constraints = constraints,
                 fixedValue = fixedValue,
             )
-        }.toList()
+        }.toList().deduplicatePropertyNames()
 
         return TypeDefinition.ComplexType(schemaName, kotlinName, doc, properties)
+    }
+
+    private fun typeKotlinName(schemaName: String, node: JsonNode): String {
+        val title = node.textOrNull("title")
+        val context = NamingContext(
+            target = NamingTarget.TYPE,
+            schemaName = schemaName,
+            title = title,
+        )
+        return namingStrategy?.nameFor(context)?.let(::toPascalCase)
+            ?: namingBindings.typeName(schemaName)?.let(::toPascalCase)
+            ?: node.textOrNull("x-object-type")?.let(::toPascalCase)
+            ?: title?.let(::toPascalCase)
+            ?: toPascalCase(schemaName)
+    }
+
+    private fun propertyKotlinName(
+        ownerSchemaName: String,
+        ownerKotlinName: String,
+        propSchemaName: String,
+        propNode: JsonNode,
+        typeRef: TypeRef,
+    ): String {
+        val title = propNode.textOrNull("title")
+        val itemTitle = arrayItemName(propNode, typeRef)
+        val context = NamingContext(
+            target = NamingTarget.PROPERTY,
+            schemaName = propSchemaName,
+            ownerSchemaName = ownerSchemaName,
+            ownerKotlinName = ownerKotlinName,
+            title = title,
+            itemTitle = itemTitle,
+            isArray = typeRef is TypeRef.ListOf,
+        )
+        return namingStrategy?.nameFor(context)?.let(::toCamelCase)
+            ?: namingBindings.propertyName(ownerSchemaName, ownerKotlinName, propSchemaName)?.let(::toCamelCase)
+            ?: propNode.textOrNull("x-object-name")?.let(::toCamelCase)
+            ?: conventionPropertyName(propSchemaName, propNode, itemTitle)
+    }
+
+    private fun conventionPropertyName(propSchemaName: String, propNode: JsonNode, itemTitle: String?): String {
+        if (schemaTypeValue(propNode) == "array" && itemTitle != null) {
+            return toCamelCase(pluralize(stripPropertyTypeSuffix(itemTitle)))
+        }
+        return propNode.textOrNull("title")
+            ?.let(::stripPropertyTypeSuffix)
+            ?.let(::toCamelCase)
+            ?: toCamelCase(propSchemaName)
+    }
+
+    private fun arrayItemName(propNode: JsonNode, typeRef: TypeRef): String? {
+        val items = if (typeRef is TypeRef.ListOf) propNode.get("items") else null
+        return items?.let { node ->
+            namingHint(node)
+                ?: node.get("\$ref")?.textValue()?.let { ref ->
+                    resolveRef(ref)?.let(::namingHint) ?: defNameFromRef(ref)
+                }
+        }
+    }
+
+    /** The explicit naming metadata a schema node carries, in precedence order. */
+    private fun namingHint(node: JsonNode): String? =
+        node.textOrNull("x-object-name")
+            ?: node.textOrNull("x-object-type")
+            ?: node.textOrNull("title")
+
+    private fun kotlinNameForSchemaName(schemaName: String): String =
+        types.firstOrNull { it.schemaName == schemaName }?.kotlinName ?: toPascalCase(schemaName)
+
+    private fun JsonNode.textOrNull(field: String): String? =
+        get(field)?.textValue()?.ifBlank { null }
+
+    private fun stripPropertyTypeSuffix(value: String): String =
+        toPascalCase(value)
+            .removeSuffix("Object")
+            .removeSuffix("Type")
+
+    private fun pluralize(value: String): String = when {
+        value.endsWith("y", ignoreCase = true) && value.length > 1 &&
+            value[value.lastIndex - 1].lowercaseChar() !in setOf('a', 'e', 'i', 'o', 'u') ->
+            value.dropLast(1) + "ies"
+        value.endsWith("s", ignoreCase = true) -> value + "es"
+        else -> value + "s"
+    }
+
+    /** Suffix duplicate property names with numeric counters. */
+    private fun List<PropertyDefinition>.deduplicatePropertyNames(): List<PropertyDefinition> {
+        val seen = mutableMapOf<String, Int>()
+        return map { prop ->
+            val count = seen.merge(prop.kotlinName, 1, Int::plus)!!
+            if (count == 1) prop else prop.copy(kotlinName = "${prop.kotlinName}$count")
+        }
     }
 
     fun buildEnumType(
@@ -677,12 +789,13 @@ internal fun toPascalCase(name: String): String {
 internal fun toCamelCase(name: String): String {
     val pascal = toPascalCase(name)
     if (pascal.isEmpty()) return pascal
-    return if (pascal.startsWith("_") && pascal.length > 1 && pascal[1].isDigit()) {
+    val candidate = if (pascal.startsWith("_") && pascal.length > 1 && pascal[1].isDigit()) {
         // Preserve the leading underscore that guards digit-start names
         "_" + pascal[1].lowercaseChar() + pascal.substring(2)
     } else {
         pascal[0].lowercaseChar() + pascal.substring(1)
     }
+    return if (candidate in KOTLIN_KEYWORDS) "${candidate}Value" else candidate
 }
 
 /**
@@ -739,3 +852,10 @@ private fun sanitizeIdentifier(s: String): String {
     if (clean.isEmpty()) return "Unknown"
     return if (clean[0].isDigit()) "_$clean" else clean
 }
+
+private val KOTLIN_KEYWORDS = setOf(
+    "as", "break", "class", "continue", "do", "else", "false", "for",
+    "fun", "if", "in", "interface", "is", "null", "object", "package",
+    "return", "super", "this", "throw", "true", "try", "typealias",
+    "typeof", "val", "var", "when", "while",
+)

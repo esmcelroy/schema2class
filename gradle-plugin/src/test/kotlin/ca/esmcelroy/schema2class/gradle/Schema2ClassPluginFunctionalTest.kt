@@ -130,6 +130,32 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `nameBindings overrides generated json property names`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    payload {
+                        source = file('schemas/payload.schema.json')
+                        packageName = 'com.corp.payload'
+                        nameBindings = file('schemas/names.conf')
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/names.conf").writeText("TelemetryPayload.deviceId = deviceIdentifier\n")
+
+        val result = runner("schema2classGenerate").build()
+        result.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.SUCCESS
+
+        File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
+            .readText() shouldContain "val deviceIdentifier: String"
+    }
+
+    @Test
     fun `verify generated passes when output is current`() {
         writeProject(
             """

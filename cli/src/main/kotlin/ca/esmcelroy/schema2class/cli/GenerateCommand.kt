@@ -13,6 +13,7 @@ import com.github.ajalt.clikt.parameters.types.file
 import ca.esmcelroy.schema2class.codegen.kotlin.AnnotationMode
 import ca.esmcelroy.schema2class.codegen.kotlin.KotlinCodegen
 import ca.esmcelroy.schema2class.core.ir.SchemaModel
+import ca.esmcelroy.schema2class.core.naming.NamingBindings
 import ca.esmcelroy.schema2class.core.naming.NamespacePackageMapper
 import ca.esmcelroy.schema2class.parser.jsonschema.JsonSchemaParser
 import ca.esmcelroy.schema2class.parser.xsd.WsdlParser
@@ -80,6 +81,15 @@ class GenerateCommand : CliktCommand(
         help = "Prefix prepended to every namespace-derived package",
     )
 
+    private val nameBindings: File? by option(
+        "--name-bindings",
+        help = "External naming binding file: Type.property=name or Type=FriendlyType",
+    ).file(mustExist = true, canBeDir = false)
+
+    private val namingBindings: NamingBindings by lazy {
+        nameBindings?.let(NamingBindings::fromFile) ?: NamingBindings.EMPTY
+    }
+
     override fun run() {
         val codegen = KotlinCodegen(
             KotlinCodegen.Options(
@@ -143,7 +153,7 @@ class GenerateCommand : CliktCommand(
                 "JSON Schema input '${input.file.name}' requires a package: " +
                     "--input ${input.file}=com.example.generated",
             )
-        return JsonSchemaParser().parse(input.file, packageName)
+        return JsonSchemaParser(namingBindings = namingBindings).parse(input.file, packageName)
     }
 
     private fun parseWsdl(input: SchemaInput): List<SchemaModel> {

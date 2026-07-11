@@ -100,6 +100,34 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `name bindings file overrides generated json property names`() {
+        val schema = File(workDir, "payload.schema.json").apply {
+            writeText(
+                """
+                {
+                  "title": "Payload",
+                  "type": "object",
+                  "properties": {
+                    "rg": { "type": "integer" }
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val bindings = File(workDir, "names.conf").apply {
+            writeText("Payload.rg = region\n")
+        }
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${schema.path}=com.corp.payload -o ${out.path} --name-bindings ${bindings.path}",
+        )
+
+        result.statusCode shouldBe 0
+        File(out, "com/corp/payload/Payload.kt").readText() shouldContain "val region: Int? = null"
+    }
+
+    @Test
     fun `wsdl input generates embedded payload types`() {
         val wsdl = File(workDir, "service.wsdl").apply {
             writeText(

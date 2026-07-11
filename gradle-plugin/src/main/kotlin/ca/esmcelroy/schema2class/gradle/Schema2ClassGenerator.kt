@@ -3,6 +3,7 @@ package ca.esmcelroy.schema2class.gradle
 import ca.esmcelroy.schema2class.codegen.kotlin.AnnotationMode
 import ca.esmcelroy.schema2class.codegen.kotlin.KotlinCodegen
 import ca.esmcelroy.schema2class.core.ir.SchemaModel
+import ca.esmcelroy.schema2class.core.naming.NamingBindings
 import ca.esmcelroy.schema2class.core.naming.NamespacePackageMapper
 import ca.esmcelroy.schema2class.parser.jsonschema.JsonSchemaParser
 import ca.esmcelroy.schema2class.parser.xsd.WsdlParser
@@ -65,7 +66,7 @@ internal object Schema2ClassGenerator {
             ?: throw GradleException(
                 "schema2class: spec '${spec.name}' is a JSON Schema and requires packageName",
             )
-        return JsonSchemaParser().parse(source, packageName)
+        return JsonSchemaParser(namingBindings = namingBindings(spec)).parse(source, packageName)
     }
 
     private fun parseWsdl(spec: SchemaSpec, source: File): List<SchemaModel> {
@@ -88,4 +89,7 @@ internal object Schema2ClassGenerator {
             )
         }
     }
+
+    private fun namingBindings(spec: SchemaSpec): NamingBindings =
+        spec.nameBindings.orNull?.asFile?.let(NamingBindings::fromFile) ?: NamingBindings.EMPTY
 }

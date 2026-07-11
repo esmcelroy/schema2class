@@ -27,6 +27,12 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val source: RegularFileProperty
 
+    /** Optional external naming binding file. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:Optional
+    abstract val nameBindings: RegularFileProperty
+
     /**
      * Kotlin package for the generated classes.
      * Required for JSON Schema. Optional for XSD: when absent, packages are
