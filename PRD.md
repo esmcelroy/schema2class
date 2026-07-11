@@ -203,8 +203,9 @@ enum class Color { RED, GREEN, BLUE }
       configured generated sources against a fresh build-temp generation)
 
 ### Phase 5 — Quality & Ecosystem
-- [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML) — Jackson
-      remains (`schema2class-n0g`)
+- [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML), Jackson
+- [x] Configurable null omission: Jackson emits `@JsonInclude(NON_NULL)`;
+      kotlinx users pair nullable defaults with `Json { encodeDefaults = false }`
 - [ ] Dokka API docs
 - [x] Integration tests (generate → compile with real kotlinc → instantiate →
       JSON document round-trip via Jackson; XML document round-trips arrive

@@ -53,9 +53,14 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val valueClasses: Property<Boolean>
 
+    /** Emit serializer metadata that omits null optional values when supported. */
+    @get:Input
+    abstract val omitNulls: Property<Boolean>
+
     init {
         annotationMode.convention("NONE")
         valueClasses.convention(false)
+        omitNulls.convention(false)
         packageOverrides.convention(emptyMap())
     }
 }

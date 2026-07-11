@@ -33,6 +33,9 @@ schema2class {
 
 `schema2classGenerate` runs before `compileKotlin` automatically (the generated
 directory is wired into the main source set when the Kotlin JVM plugin is present).
+For Jackson output, set `omitNulls = true` on a schema to emit
+`@JsonInclude(JsonInclude.Include.NON_NULL)`. For kotlinx output, keep nullable
+defaults and configure the runtime encoder with `Json { encodeDefaults = false }`.
 
 ## Using the generated classes together
 
@@ -63,4 +66,5 @@ val receivedPayload = Json.decodeFromString<TelemetryPayload>(received.payload)
 | `source` | required | required |
 | `packageName` | optional — omitted: derive from namespace(s) + resolve imports; set: single-document parse into that package | **required** |
 | `packageOverrides` | namespace URI → package map for multi-file resolution | ignored |
-| `annotationMode` | `NONE` / `KOTLINX_SERIALIZATION` / `XMLUTIL` | same (XMLUTIL adds no value for JSON) |
+| `annotationMode` | `NONE` / `KOTLINX_SERIALIZATION` / `XMLUTIL` / `JACKSON` | same (XMLUTIL adds no value for JSON) |
+| `omitNulls` | in `JACKSON` mode emits class-level `@JsonInclude(JsonInclude.Include.NON_NULL)` | same; in kotlinx modes, pair nullable defaults with `Json { encodeDefaults = false }` |

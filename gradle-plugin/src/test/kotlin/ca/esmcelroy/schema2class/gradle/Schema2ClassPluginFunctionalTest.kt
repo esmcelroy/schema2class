@@ -104,6 +104,32 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `omitNulls emits jackson non null inclusion`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    payload {
+                        source = file('schemas/payload.schema.json')
+                        packageName = 'com.corp.payload'
+                        annotationMode = 'JACKSON'
+                        omitNulls = true
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("schema2classGenerate").build()
+        result.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.SUCCESS
+
+        File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
+            .readText() shouldContain "@JsonInclude(JsonInclude.Include.NON_NULL)"
+    }
+
+    @Test
     fun `verify generated passes when output is current`() {
         writeProject(
             """

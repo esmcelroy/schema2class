@@ -72,6 +72,21 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `omit nulls flag emits jackson non null inclusion`() {
+        val json = fixture("telemetry-payload.schema.json")
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${json.path}=com.corp.payload -o ${out.path} " +
+                "--annotation-mode jackson --omit-nulls",
+        )
+
+        result.statusCode shouldBe 0
+        File(out, "com/corp/payload/TelemetryPayload.kt").readText() shouldContain
+            "@JsonInclude(JsonInclude.Include.NON_NULL)"
+    }
+
+    @Test
     fun `value classes option emits constrained simple types as value classes`() {
         val xsd = fixture("business-doc.xsd")
         val out = File(workDir, "out")

@@ -64,6 +64,11 @@ class GenerateCommand : CliktCommand(
         help = "Generate @JvmInline value classes for constrained simple types instead of typealiases",
     ).flag(default = false)
 
+    private val omitNulls: Boolean by option(
+        "--omit-nulls",
+        help = "Emit serializer metadata that omits null optional values when supported by the annotation mode",
+    ).flag(default = false)
+
     private val packageOverrides: Map<String, String> by option(
         "--package-override",
         metavar = "NAMESPACE=PACKAGE",
@@ -80,6 +85,7 @@ class GenerateCommand : CliktCommand(
             KotlinCodegen.Options(
                 annotationMode = annotationMode,
                 generateValueClasses = valueClasses,
+                omitNulls = omitNulls,
             ),
         )
         val fileCount = inputs.sumOf { generate(input = it, codegen = codegen) }

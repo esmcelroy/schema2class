@@ -58,6 +58,7 @@ class KotlinCodegen(private val options: Options = Options()) {
     data class Options(
         val annotationMode: AnnotationMode = AnnotationMode.NONE,
         val generateValueClasses: Boolean = false,
+        val omitNulls: Boolean = false,
     )
 
     private val kotlinxMode: Boolean
@@ -363,6 +364,9 @@ class KotlinCodegen(private val options: Options = Options()) {
             }
             builder.addAnnotation(xmlName.build())
         }
+        if (jacksonMode && options.omitNulls) {
+            builder.addAnnotation(jsonIncludeNonNullAnnotation())
+        }
     }
 
     private fun serialNameAnnotation(wireName: String): AnnotationSpec =
@@ -370,6 +374,11 @@ class KotlinCodegen(private val options: Options = Options()) {
 
     private fun jsonPropertyAnnotation(wireName: String): AnnotationSpec =
         AnnotationSpec.builder(JSON_PROPERTY).addMember("%S", wireName).build()
+
+    private fun jsonIncludeNonNullAnnotation(): AnnotationSpec =
+        AnnotationSpec.builder(JSON_INCLUDE)
+            .addMember("%T.%L", JSON_INCLUDE.nestedClass("Include"), "NON_NULL")
+            .build()
 
     private fun kindAnnotation(kind: PropertyKind): AnnotationSpec = when (kind) {
         PropertyKind.ELEMENT -> AnnotationSpec.builder(XML_ELEMENT).addMember("%L", true).build()
@@ -572,6 +581,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
         val JSON_PROPERTY = ClassName("com.fasterxml.jackson.annotation", "JsonProperty")
+        val JSON_INCLUDE = ClassName("com.fasterxml.jackson.annotation", "JsonInclude")
         val JACKSON_XML_PROPERTY =
             ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlProperty")
         val JACKSON_XML_ELEMENT_WRAPPER =

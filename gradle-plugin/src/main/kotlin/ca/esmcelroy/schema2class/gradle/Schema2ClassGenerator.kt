@@ -22,6 +22,7 @@ internal object Schema2ClassGenerator {
             KotlinCodegen.Options(
                 annotationMode = parseAnnotationMode(spec),
                 generateValueClasses = spec.valueClasses.get(),
+                omitNulls = spec.omitNulls.get(),
             ),
         )
         parseModels(spec).forEach { model -> writeModel(codegen, model, outDir) }

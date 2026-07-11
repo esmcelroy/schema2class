@@ -764,6 +764,45 @@ class KotlinCodegenTest {
     }
 
     @Test
+    fun `jackson mode can annotate classes to omit null values`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Payload",
+            kotlinName = "Payload",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "optionalField",
+                    kotlinName = "optionalField",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = true,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+                PropertyDefinition(
+                    schemaName = "requiredField",
+                    kotlinName = "requiredField",
+                    type = TypeRef.Primitive(PrimitiveType.STRING),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val jacksonCodegen = KotlinCodegen(
+            KotlinCodegen.Options(
+                annotationMode = AnnotationMode.JACKSON,
+                omitNulls = true,
+            ),
+        )
+
+        val source = sourceFor(jacksonCodegen.generate(model(type)), "Payload")
+
+        source shouldContain "@JsonInclude(JsonInclude.Include.NON_NULL)"
+        source shouldContain "val optionalField: String? = null"
+        source shouldContain "val requiredField: String"
+    }
+
+    @Test
     fun `jackson mode annotates xsd attributes text and unwrapped element lists`() {
         val type = TypeDefinition.ComplexType(
             schemaName = "AmountList",
