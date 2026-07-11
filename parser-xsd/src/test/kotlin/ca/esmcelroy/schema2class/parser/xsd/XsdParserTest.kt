@@ -278,9 +278,9 @@ class XsdParserTest {
         type.properties.find { it.schemaName == "count" }.shouldNotBeNull()
             .defaultValue shouldBe "7"
         type.properties.find { it.schemaName == "rate" }.shouldNotBeNull()
-            .defaultValue shouldBe "java.math.BigDecimal(\"12.50\")"
+            .fixedValue shouldBe "java.math.BigDecimal(\"12.50\")"
         type.properties.find { it.schemaName == "enabled" }.shouldNotBeNull()
-            .defaultValue shouldBe "true"
+            .fixedValue shouldBe "true"
         type.properties.find { it.schemaName == "when" }.shouldNotBeNull()
             .defaultValue shouldBe "java.time.LocalDate.parse(\"2026-07-08\")"
         type.properties.find { it.schemaName == "mode" }.shouldNotBeNull()

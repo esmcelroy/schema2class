@@ -18,6 +18,7 @@ data class PropertyDefinition(
     val documentation: String?,
     val constraints: List<Constraint> = emptyList(),
     val kind: PropertyKind = PropertyKind.ELEMENT,
+    val fixedValue: String? = null,
 )
 
 /**

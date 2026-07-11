@@ -189,8 +189,8 @@ enum class Color { RED, GREEN, BLUE }
       `InheritanceFlattener` (data classes are final); restriction re-declares
       kept content; cross-namespace chains resolved over the whole schema set
 - [ ] Value class generation for constrained simple types
-- [ ] Default value emission — JSON Schema `default` done; XSD `default`/`fixed`
-      attributes still open
+- [x] Default/fixed value emission — JSON Schema `default`/`const` and XSD
+      `default`/`fixed` become Kotlin defaults; fixed values emit guards
 
 ### Phase 4 — Build Tooling
 - [x] Gradle plugin (`schema2classGenerate` task; mixed .xsd/.json specs with

@@ -653,6 +653,7 @@ class XsdParser {
                 nullable = isNullable,
                 defaultValue = defaultLiteral(el, if (isList) TypeRef.ListOf(elementTypeRef) else elementTypeRef, name),
                 documentation = extractTypeDoc(el),
+                fixedValue = fixedLiteral(el, if (isList) TypeRef.ListOf(elementTypeRef) else elementTypeRef, name),
             )
         }
 
@@ -689,13 +690,17 @@ class XsdParser {
                 defaultValue = defaultLiteral(el, typeRef, name),
                 documentation = extractTypeDoc(el),
                 kind = PropertyKind.ATTRIBUTE,
+                fixedValue = fixedLiteral(el, typeRef, name),
             )
         }
 
         private fun defaultLiteral(el: Element, typeRef: TypeRef, propertyName: String): String? {
-            val value = el.getAttribute("default").ifBlank {
-                el.getAttribute("fixed").ifBlank { null }
-            } ?: return null
+            val value = el.getAttribute("default").ifBlank { null } ?: return null
+            return kotlinLiteralForLexicalValue(value, typeRef, propertyName)
+        }
+
+        private fun fixedLiteral(el: Element, typeRef: TypeRef, propertyName: String): String? {
+            val value = el.getAttribute("fixed").ifBlank { null } ?: return null
             return kotlinLiteralForLexicalValue(value, typeRef, propertyName)
         }
 

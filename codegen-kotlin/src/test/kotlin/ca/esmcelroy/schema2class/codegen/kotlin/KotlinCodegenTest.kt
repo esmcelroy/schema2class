@@ -81,6 +81,42 @@ class KotlinCodegenTest {
         source shouldNotContain "val street: String? ="
     }
 
+    @Test
+    fun `ComplexType fixed values generate defaults and require guards`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Flags",
+            kotlinName = "Flags",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "codingType",
+                    kotlinName = "codingType",
+                    type = TypeRef.Primitive(PrimitiveType.INT),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    fixedValue = "1",
+                ),
+                PropertyDefinition(
+                    schemaName = "enabled",
+                    kotlinName = "enabled",
+                    type = TypeRef.Primitive(PrimitiveType.BOOLEAN),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                    fixedValue = "true",
+                ),
+            ),
+        )
+
+        val source = sourceFor(generate(type), "Flags")
+
+        source shouldContain "val codingType: Int = 1"
+        source shouldContain "val enabled: Boolean = true"
+        source shouldContain "require(codingType == 1)"
+        source shouldContain "require(enabled == true)"
+    }
+
     // -----------------------------------------------------------------------
     // 2. ComplexType with a List<T> property
     // -----------------------------------------------------------------------

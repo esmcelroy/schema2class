@@ -380,6 +380,7 @@ private class ParseContext(
             val suggestedTypeName = "${schemaName}_${propSchemaName}"
             val typeRef = resolveTypeRef(propNode, suggestedTypeName)
             val defaultValue = kotlinDefaultLiteral(propNode.get("default"), propSchemaName)
+            val fixedValue = kotlinDefaultLiteral(propNode.get("const"), propSchemaName)
 
             PropertyDefinition(
                 schemaName = propSchemaName,
@@ -389,6 +390,7 @@ private class ParseContext(
                 defaultValue = defaultValue,
                 documentation = propDoc,
                 constraints = constraints,
+                fixedValue = fixedValue,
             )
         }.toList()
 

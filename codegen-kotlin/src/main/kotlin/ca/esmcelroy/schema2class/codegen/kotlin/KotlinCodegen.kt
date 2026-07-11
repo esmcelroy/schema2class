@@ -143,7 +143,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             val resolvedTypeName = if (prop.nullable) typeName.copy(nullable = true) else typeName
 
             val paramBuilder = ParameterSpec.builder(prop.kotlinName, resolvedTypeName)
-            val defaultValue = prop.defaultValue
+            val defaultValue = prop.defaultValue ?: prop.fixedValue
             when {
                 defaultValue != null -> paramBuilder.defaultValue(CodeBlock.of(defaultValue))
                 prop.nullable -> paramBuilder.defaultValue("null")
@@ -166,6 +166,8 @@ class KotlinCodegen(private val options: Options = Options()) {
             typeBuilder.addProperty(propBuilder.build())
         }
 
+        addFixedValueChecks(typeBuilder, allProps)
+
         if (kotlinxMode) {
             allProps.flatMap { it.type.contextualPrimitiveTypes() }
                 .distinct()
@@ -176,6 +178,22 @@ class KotlinCodegen(private val options: Options = Options()) {
             typeBuilder.primaryConstructor(constructorBuilder.build())
         }
         return typeBuilder.build()
+    }
+
+    private fun addFixedValueChecks(typeBuilder: TypeSpec.Builder, properties: List<PropertyDefinition>) {
+        val fixedProps = properties.filter { it.fixedValue != null }
+        if (fixedProps.isEmpty()) return
+
+        val block = CodeBlock.builder()
+        fixedProps.forEach { prop ->
+            block.addStatement(
+                "require(%N == %L) { %S }",
+                prop.kotlinName,
+                prop.fixedValue,
+                "schema2class: property '${prop.schemaName}' is fixed to ${prop.fixedValue}",
+            )
+        }
+        typeBuilder.addInitializerBlock(block.build())
     }
 
     /**

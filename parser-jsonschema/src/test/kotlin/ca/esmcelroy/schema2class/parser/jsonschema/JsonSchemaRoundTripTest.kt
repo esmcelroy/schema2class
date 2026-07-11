@@ -183,6 +183,27 @@ class JsonSchemaRoundTripTest {
         root shouldContain "val token: String? = \"\\${'$'}{{ github.token }}\""
     }
 
+    @Test
+    fun `const value round-trips as a default with a fixed value guard`() {
+        val model = parser.parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "codingType": { "type": "integer", "const": 1 }
+              }
+            }
+            """.trimIndent().byteInputStream(),
+            "com.example.defaults",
+        )
+        val sources = codegen.generate(model)
+        assertSourcesWellFormed(sources, "com.example.defaults")
+
+        val root = sources.getValue("com/example/defaults/Root.kt")
+        root shouldContain "val codingType: Int? = 1"
+        root shouldContain "require(codingType == 1)"
+    }
+
     // ── Recursive schema ──────────────────────────────────────────────────────
 
     @Test

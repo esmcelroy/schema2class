@@ -283,6 +283,24 @@ class JsonSchemaParserTest {
     }
 
     @Test
+    fun `property const value is preserved as a fixed value`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "codingType": { "type": "integer", "const": 1 }
+              }
+            }
+            """
+        )
+        val rootType = model.types.filterIsInstance<TypeDefinition.ComplexType>().first()
+        val prop = rootType.properties.find { it.schemaName == "codingType" }.shouldNotBeNull()
+        prop.defaultValue shouldBe null
+        prop.fixedValue shouldBe "1"
+    }
+
+    @Test
     fun `string default value is emitted as a kotlin-safe literal`() {
         val model = parse(
             """
