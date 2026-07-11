@@ -556,7 +556,7 @@ class XsdParser {
                     type = baseRef,
                     nullable = false,
                     defaultValue = null,
-                    documentation = null,
+                    documentation = extractTypeDoc(derivation) ?: extractTypeDoc(typeEl),
                     kind = PropertyKind.CONTENT,
                 ) to null
                 else -> null to baseRef
@@ -815,9 +815,12 @@ class XsdParser {
 
         private fun extractTypeDoc(el: Element): String? {
             val annotation = xsdChild(el, "annotation") ?: return null
-            val docEl = xsdChild(annotation, "documentation") ?: return null
-            return findCctsDescription(docEl)?.ifBlank { null }
-                ?: docEl.textContent.trim().ifBlank { null }
+            val docs = xsdChildren(annotation, "documentation")
+                .mapNotNull { docEl ->
+                    findCctsDescription(docEl)?.ifBlank { null }
+                        ?: docEl.textContent.trim().ifBlank { null }
+                }
+            return docs.joinToString("\n").ifBlank { null }
         }
 
         private fun findCctsName(docEl: Element): String? {

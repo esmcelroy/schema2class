@@ -201,7 +201,14 @@ class XsdParserTest {
               <xsd:complexType name="AmountType">
                 <xsd:simpleContent>
                   <xsd:extension base="xsd:decimal">
-                    <xsd:attribute name="currencyID" type="xsd:token" use="optional"/>
+                    <xsd:annotation>
+                      <xsd:documentation>Decimal amount text.</xsd:documentation>
+                    </xsd:annotation>
+                    <xsd:attribute name="currencyID" type="xsd:token" use="optional">
+                      <xsd:annotation>
+                        <xsd:documentation>Currency code.</xsd:documentation>
+                      </xsd:annotation>
+                    </xsd:attribute>
                   </xsd:extension>
                 </xsd:simpleContent>
               </xsd:complexType>
@@ -215,10 +222,12 @@ class XsdParserTest {
         content.type shouldBe TypeRef.Primitive(PrimitiveType.DECIMAL)
         content.nullable shouldBe false
         content.kind shouldBe ca.esmcelroy.schema2class.core.ir.PropertyKind.CONTENT
+        content.documentation shouldBe "Decimal amount text."
 
         val currency = type.properties.find { it.schemaName == "currencyID" }.shouldNotBeNull()
         currency.nullable shouldBe true
         currency.kind shouldBe ca.esmcelroy.schema2class.core.ir.PropertyKind.ATTRIBUTE
+        currency.documentation shouldBe "Currency code."
     }
 
     // ── Test 9: simpleType restriction without enum → AliasType ──────────────

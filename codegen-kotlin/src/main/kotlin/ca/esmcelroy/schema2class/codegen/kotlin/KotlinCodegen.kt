@@ -15,6 +15,7 @@ import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
+import ca.esmcelroy.schema2class.core.ir.EnumValue
 import ca.esmcelroy.schema2class.core.ir.PrimitiveType
 import ca.esmcelroy.schema2class.core.ir.PropertyDefinition
 import ca.esmcelroy.schema2class.core.ir.PropertyKind
@@ -133,7 +134,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         }
         addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName, namespace)
 
-        type.documentation?.let { typeBuilder.addKdoc("%L", it) }
+        type.documentation?.let { typeBuilder.addKdoc("%L", it.toKdocText()) }
 
         // superType is provenance only: Kotlin data classes are final, so schema
         // inheritance is flattened into properties by InheritanceFlattener before
@@ -163,7 +164,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             if (xmlMode) {
                 propBuilder.addAnnotation(kindAnnotation(prop.kind))
             }
-            prop.documentation?.let { propBuilder.addKdoc("%L", it) }
+            prop.documentation?.let { propBuilder.addKdoc("%L", it.toKdocText()) }
             typeBuilder.addProperty(propBuilder.build())
         }
 
@@ -197,6 +198,11 @@ class KotlinCodegen(private val options: Options = Options()) {
         typeBuilder.addInitializerBlock(block.build())
     }
 
+    private fun String.toKdocText(): String =
+        replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace("*/", "* /")
+
     /**
      * Returns the generated TypeSpec plus a map of kotlinName -> serializedValue
      * for enum constants that need inline comments added in post-processing.
@@ -207,7 +213,7 @@ class KotlinCodegen(private val options: Options = Options()) {
     ): Pair<TypeSpec, Map<String, String>> {
         val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
         addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName, namespace)
-        type.documentation?.let { typeBuilder.addKdoc("%L", it) }
+        type.documentation?.let { typeBuilder.addKdoc("%L", it.toKdocText()) }
 
         val commentMap = mutableMapOf<String, String>()
 
@@ -218,12 +224,9 @@ class KotlinCodegen(private val options: Options = Options()) {
                 } else {
                     serialNameAnnotation(value.serializedValue)
                 }
-                typeBuilder.addEnumConstant(
-                    value.kotlinName,
-                    TypeSpec.anonymousClassBuilder()
-                        .addAnnotation(annotation)
-                        .build(),
-                )
+                typeBuilder.addEnumConstant(value.kotlinName, enumConstantType(value, annotation))
+            } else if (value.documentation != null) {
+                typeBuilder.addEnumConstant(value.kotlinName, enumConstantType(value, null))
             } else {
                 typeBuilder.addEnumConstant(value.kotlinName)
             }
@@ -233,6 +236,13 @@ class KotlinCodegen(private val options: Options = Options()) {
         }
 
         return typeBuilder.build() to commentMap
+    }
+
+    private fun enumConstantType(value: EnumValue, annotation: AnnotationSpec?): TypeSpec {
+        val builder = TypeSpec.anonymousClassBuilder()
+        annotation?.let { builder.addAnnotation(it) }
+        value.documentation?.let { builder.addKdoc("%L", it.toKdocText()) }
+        return builder.build()
     }
 
     /**
@@ -280,7 +290,7 @@ class KotlinCodegen(private val options: Options = Options()) {
             )
         }
 
-        type.documentation?.let { sealedBuilder.addKdoc("%L", it) }
+        type.documentation?.let { sealedBuilder.addKdoc("%L", it.toKdocText()) }
 
         for (variant in type.variants) {
             val variantTypeName = variant.type.toKotlinTypeName(packageName).withContextualIfNeeded(variant.type)
@@ -309,7 +319,7 @@ class KotlinCodegen(private val options: Options = Options()) {
     private fun generateAliasType(type: TypeDefinition.AliasType, packageName: String): TypeAliasSpec {
         val aliasedTypeName = type.aliasedType.toKotlinTypeName(packageName)
         val builder = TypeAliasSpec.builder(type.kotlinName, aliasedTypeName)
-        type.documentation?.let { builder.addKdoc("%L", it) }
+        type.documentation?.let { builder.addKdoc("%L", it.toKdocText()) }
         return builder.build()
     }
 
@@ -334,7 +344,7 @@ class KotlinCodegen(private val options: Options = Options()) {
                     .build(),
             )
         addTypeAnnotations(builder, type.schemaName, type.kotlinName, namespace)
-        type.documentation?.let { builder.addKdoc("%L", it) }
+        type.documentation?.let { builder.addKdoc("%L", it.toKdocText()) }
         if (kotlinxMode) {
             type.aliasedType.contextualPrimitiveTypes()
                 .forEach { builder.addType(stringSerializerType(it)) }

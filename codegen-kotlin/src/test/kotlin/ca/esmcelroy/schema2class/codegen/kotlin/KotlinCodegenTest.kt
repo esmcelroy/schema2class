@@ -357,6 +357,34 @@ class KotlinCodegenTest {
         source shouldContain "/**"
     }
 
+    @Test
+    fun `documentation on enum values emits KDoc and escapes terminators`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "Status",
+            kotlinName = "Status",
+            documentation = "Status values.",
+            values = listOf(
+                EnumValue(
+                    serializedValue = "ok",
+                    kotlinName = "OK",
+                    documentation = "Everything is fine.",
+                ),
+                EnumValue(
+                    serializedValue = "bad",
+                    kotlinName = "BAD",
+                    documentation = "Contains a * / terminator: */",
+                ),
+            ),
+        )
+
+        val source = sourceFor(generate(type), "Status")
+
+        source shouldContain "Status values."
+        source shouldContain "Everything is fine."
+        source shouldContain "Contains a * / terminator: * /"
+        source shouldNotContain "terminator: */"
+    }
+
     // -----------------------------------------------------------------------
     // 8. ComplexType with contentProperty → first constructor param
     // -----------------------------------------------------------------------

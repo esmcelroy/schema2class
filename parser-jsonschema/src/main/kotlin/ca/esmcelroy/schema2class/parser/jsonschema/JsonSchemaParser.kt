@@ -731,7 +731,8 @@ private class ParseContext(
     fun extractDoc(node: JsonNode): String? {
         val title = node.get("title")?.textValue()
         val desc = node.get("description")?.textValue()
-        return listOfNotNull(title, desc).joinToString("\n").takeIf { it.isNotBlank() }
+        val comment = node.get("\$comment")?.textValue()
+        return listOfNotNull(title, desc, comment).joinToString("\n").takeIf { it.isNotBlank() }
     }
 
     fun extractConstraints(node: JsonNode): List<Constraint> {

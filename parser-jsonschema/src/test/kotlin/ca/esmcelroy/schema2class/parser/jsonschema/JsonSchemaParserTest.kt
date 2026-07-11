@@ -251,6 +251,7 @@ class JsonSchemaParserTest {
               "definitions": {
                 "Color": {
                   "description": "A colour",
+                  "${'$'}comment": "Used by status indicators.",
                   "type": "string",
                   "enum": ["red", "green"]
                 }
@@ -262,7 +263,28 @@ class JsonSchemaParserTest {
             .filterIsInstance<TypeDefinition.EnumType>()
             .find { it.schemaName == "Color" }
             .shouldNotBeNull()
-        enumType.documentation shouldBe "A colour"
+        enumType.documentation shouldBe "A colour\nUsed by status indicators."
+    }
+
+    @Test
+    fun `comment becomes documentation on properties`() {
+        val model = parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "confidence": {
+                  "type": "integer",
+                  "description": "Confidence score.",
+                  "${'$'}comment": "Range is documented upstream."
+                }
+              }
+            }
+            """
+        )
+        val rootType = model.types.filterIsInstance<TypeDefinition.ComplexType>().first()
+        val prop = rootType.properties.find { it.schemaName == "confidence" }.shouldNotBeNull()
+        prop.documentation shouldBe "Confidence score.\nRange is documented upstream."
     }
 
     @Test

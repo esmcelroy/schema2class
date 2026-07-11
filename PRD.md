@@ -208,6 +208,8 @@ enum class Color { RED, GREEN, BLUE }
 - [x] Annotation modes: none, kotlinx.serialization, xmlutil (XML), Jackson
 - [x] Configurable null omission: Jackson emits `@JsonInclude(NON_NULL)`;
       kotlinx users pair nullable defaults with `Json { encodeDefaults = false }`
+- [x] Schema documentation carry-through to generated KDoc for types,
+      properties, content properties, and enum values
 - [ ] Dokka API docs
 - [x] Integration tests (generate → compile with real kotlinc → instantiate →
       JSON document round-trip via Jackson; XML document round-trips arrive
