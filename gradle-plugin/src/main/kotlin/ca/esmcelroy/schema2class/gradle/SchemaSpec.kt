@@ -51,6 +51,15 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val packageOverrides: MapProperty<String, String>
 
+    /** XSD only: XML wire namespace to emit when no namespace-specific override is present. */
+    @get:Input
+    @get:Optional
+    abstract val wireNamespace: Property<String>
+
+    /** XSD only: schema namespace URI → XML wire namespace overrides. */
+    @get:Input
+    abstract val wireNamespaceOverrides: MapProperty<String, String>
+
     /** One of NONE, KOTLINX_SERIALIZATION, XMLUTIL, JACKSON (case-insensitive). */
     @get:Input
     abstract val annotationMode: Property<String>
@@ -68,5 +77,6 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
         valueClasses.convention(false)
         omitNulls.convention(false)
         packageOverrides.convention(emptyMap())
+        wireNamespaceOverrides.convention(emptyMap())
     }
 }

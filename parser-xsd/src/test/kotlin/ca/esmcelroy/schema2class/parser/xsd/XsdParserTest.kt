@@ -806,6 +806,17 @@ class XsdParserTest {
     }
 
     @Test
+    fun `wire namespace override does not affect package derivation`() {
+        val model = parser.parse(
+            """<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>""".byteInputStream(),
+            wireNamespace = "urn:wire:override",
+        )
+        model.namespace shouldBe null
+        model.wireNamespace shouldBe "urn:wire:override"
+        model.packageName shouldBe "generated"
+    }
+
+    @Test
     fun `parse with configured mapper applies basePackage and overrides`() {
         val mapper = ca.esmcelroy.schema2class.core.naming.NamespacePackageMapper(
             basePackage = "com.corp.gen",

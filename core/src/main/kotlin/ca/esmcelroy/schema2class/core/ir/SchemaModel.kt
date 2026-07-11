@@ -14,6 +14,8 @@ data class SchemaModel(
     val packageName: String,
     val types: List<TypeDefinition>,
     val sourceFormat: SourceFormat,
+    /** Namespace to emit in wire-format annotations; defaults to [namespace]. */
+    val wireNamespace: String? = namespace,
 )
 
 enum class SourceFormat { XSD, JSON_SCHEMA }

@@ -58,6 +58,34 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `wire namespace option emits xml namespace without changing explicit package`() {
+        val xsd = File(workDir, "envelope.xsd").apply {
+            writeText(
+                """
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:complexType name="Envelope">
+                    <xs:sequence>
+                      <xs:element name="id" type="xs:string"/>
+                    </xs:sequence>
+                  </xs:complexType>
+                </xs:schema>
+                """.trimIndent(),
+            )
+        }
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${xsd.path}=com.corp.envelope -o ${out.path} " +
+                "-a xmlutil --wire-namespace urn:wire:envelope",
+        )
+
+        result.statusCode shouldBe 0
+        val generated = File(out, "com/corp/envelope/Envelope.kt")
+        generated.exists() shouldBe true
+        generated.readText() shouldContain "namespace = \"urn:wire:envelope\""
+    }
+
+    @Test
     fun `jackson mode emits jackson annotations`() {
         val json = fixture("telemetry-payload.schema.json")
         val out = File(workDir, "out")

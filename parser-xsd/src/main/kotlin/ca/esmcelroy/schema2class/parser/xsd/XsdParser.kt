@@ -20,19 +20,26 @@ internal const val XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
 class XsdParser {
 
-    fun parse(inputStream: InputStream, packageName: String): SchemaModel {
+    fun parse(inputStream: InputStream, packageName: String, wireNamespace: String? = null): SchemaModel {
         val root = parseDocument(inputStream)
-        val model = ParseContext(listOf(root), targetNamespaceOf(root), packageName).parse()
+        val namespace = targetNamespaceOf(root)
+        val model = ParseContext(
+            roots = listOf(root),
+            targetNamespace = namespace,
+            packageName = packageName,
+            wireNamespace = wireNamespace ?: namespace,
+        ).parse()
         return InheritanceFlattener.flatten(listOf(model)).single()
     }
 
-    fun parse(file: File, packageName: String): SchemaModel =
-        file.inputStream().use { parse(it, packageName) }
+    fun parse(file: File, packageName: String, wireNamespace: String? = null): SchemaModel =
+        file.inputStream().use { parse(it, packageName, wireNamespace) }
 
     /** Derives the Kotlin package from the schema's targetNamespace via [packageMapper]. */
     fun parse(
         inputStream: InputStream,
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+        wireNamespace: String? = null,
     ): SchemaModel {
         val root = parseDocument(inputStream)
         val namespace = targetNamespaceOf(root)
@@ -40,6 +47,7 @@ class XsdParser {
             roots = listOf(root),
             targetNamespace = namespace,
             packageName = packageMapper.toPackage(namespace),
+            wireNamespace = wireNamespace ?: namespace,
             fallbackMapper = packageMapper,
         ).parse()
         return InheritanceFlattener.flatten(listOf(model)).single()
@@ -49,8 +57,9 @@ class XsdParser {
     fun parse(
         file: File,
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+        wireNamespace: String? = null,
     ): SchemaModel =
-        file.inputStream().use { parse(it, packageMapper) }
+        file.inputStream().use { parse(it, packageMapper, wireNamespace) }
 
     /**
      * Parses already-extracted xs:schema document roots, grouped by targetNamespace.
@@ -61,6 +70,8 @@ class XsdParser {
     fun parseSchemaRoots(
         roots: List<Element>,
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+        wireNamespaceOverrides: Map<String?, String> = emptyMap(),
+        defaultWireNamespace: String? = null,
     ): List<SchemaModel> {
         val rootsByNamespace = LinkedHashMap<String?, MutableList<Element>>()
         for (root in roots) {
@@ -72,6 +83,7 @@ class XsdParser {
                 roots = namespaceRoots,
                 targetNamespace = namespace,
                 packageName = packages.getValue(namespace),
+                wireNamespace = wireNamespaceOverrides[namespace] ?: defaultWireNamespace ?: namespace,
                 packagesByNamespace = packages,
                 fallbackMapper = packageMapper,
             ).parse()
@@ -95,6 +107,8 @@ class XsdParser {
     fun parseWithImports(
         file: File,
         packageMapper: NamespacePackageMapper = NamespacePackageMapper(),
+        wireNamespaceOverrides: Map<String?, String> = emptyMap(),
+        defaultWireNamespace: String? = null,
     ): List<SchemaModel> {
         val loader = SchemaSetLoader()
         loader.load(file.canonicalFile, adoptedNamespace = null)
@@ -113,6 +127,7 @@ class XsdParser {
                 roots = roots,
                 targetNamespace = namespace,
                 packageName = packages.getValue(namespace),
+                wireNamespace = wireNamespaceOverrides[namespace] ?: defaultWireNamespace ?: namespace,
                 packagesByNamespace = packages,
                 fallbackMapper = packageMapper,
             ).parse()
@@ -191,6 +206,7 @@ class XsdParser {
         private val roots: List<Element>,
         private val targetNamespace: String?,
         private val packageName: String,
+        private val wireNamespace: String?,
         private val packagesByNamespace: Map<String?, String> = emptyMap(),
         private val fallbackMapper: NamespacePackageMapper = NamespacePackageMapper(),
     ) {
@@ -233,6 +249,7 @@ class XsdParser {
                 packageName = packageName,
                 types = types,
                 sourceFormat = SourceFormat.XSD,
+                wireNamespace = wireNamespace,
             )
         }
 

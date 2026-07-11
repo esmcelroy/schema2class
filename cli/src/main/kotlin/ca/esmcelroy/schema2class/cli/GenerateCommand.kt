@@ -76,6 +76,17 @@ class GenerateCommand : CliktCommand(
         help = "XSD namespace URI to Kotlin package override (repeatable)",
     ).associate()
 
+    private val wireNamespace: String? by option(
+        "--wire-namespace",
+        help = "XML wire namespace for XSD models when no namespace-specific override is present",
+    )
+
+    private val wireNamespaceOverrides: Map<String, String> by option(
+        "--wire-namespace-override",
+        metavar = "SCHEMA_NAMESPACE=WIRE_NAMESPACE",
+        help = "XSD schema namespace URI to XML wire namespace override (repeatable)",
+    ).associate()
+
     private val basePackage: String? by option(
         "--base-package",
         help = "Prefix prepended to every namespace-derived package",
@@ -138,13 +149,18 @@ class GenerateCommand : CliktCommand(
 
     private fun parseXsd(input: SchemaInput): List<SchemaModel> =
         if (input.packageName != null) {
-            listOf(XsdParser().parse(input.file, input.packageName))
+            listOf(XsdParser().parse(input.file, input.packageName, wireNamespace))
         } else {
             val mapper = NamespacePackageMapper(
                 basePackage = basePackage,
                 overrides = packageOverrides,
             )
-            XsdParser().parseWithImports(input.file, mapper)
+            XsdParser().parseWithImports(
+                file = input.file,
+                packageMapper = mapper,
+                wireNamespaceOverrides = wireNamespaceOverrides.toNullableKeyMap(),
+                defaultWireNamespace = wireNamespace,
+            )
         }
 
     private fun parseJsonSchema(input: SchemaInput): SchemaModel {
@@ -163,4 +179,8 @@ class GenerateCommand : CliktCommand(
         )
         return WsdlParser().parse(input.file, mapper)
     }
+
+    private fun Map<String, String>.toNullableKeyMap(): Map<String?, String> =
+        entries.associate { (key, value) -> (key as String?) to value }
+
 }

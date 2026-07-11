@@ -41,6 +41,20 @@ class XsdMultiFileTest {
     }
 
     @Test
+    fun `wire namespace overrides do not affect imported namespace packages`() {
+        val models = parser.parseWithImports(
+            fixture("catalog.xsd"),
+            wireNamespaceOverrides = mapOf("urn:test:money" to "urn:wire:money"),
+            defaultWireNamespace = "urn:wire:default",
+        )
+
+        val money = models.first { it.namespace == "urn:test:money" }
+        money.packageName shouldBe "test.money"
+        money.wireNamespace shouldBe "urn:wire:money"
+        models.first { it.namespace == "urn:test:catalog" }.wireNamespace shouldBe "urn:wire:default"
+    }
+
+    @Test
     fun `chameleon include splices types into the including namespace`() {
         val models = parser.parseWithImports(fixture("catalog.xsd"))
         val catalogTypes = models.first { it.namespace == "urn:test:catalog" }

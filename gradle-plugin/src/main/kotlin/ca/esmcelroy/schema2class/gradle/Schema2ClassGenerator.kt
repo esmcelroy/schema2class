@@ -54,10 +54,15 @@ internal object Schema2ClassGenerator {
     private fun parseXsd(spec: SchemaSpec, source: File): List<SchemaModel> {
         val explicitPackage = spec.packageName.orNull
         return if (explicitPackage != null) {
-            listOf(XsdParser().parse(source, explicitPackage))
+            listOf(XsdParser().parse(source, explicitPackage, spec.wireNamespace.orNull))
         } else {
             val mapper = NamespacePackageMapper(overrides = spec.packageOverrides.get())
-            XsdParser().parseWithImports(source, mapper)
+            XsdParser().parseWithImports(
+                file = source,
+                packageMapper = mapper,
+                wireNamespaceOverrides = spec.wireNamespaceOverrides.get().toNullableKeyMap(),
+                defaultWireNamespace = spec.wireNamespace.orNull,
+            )
         }
     }
 
@@ -92,4 +97,8 @@ internal object Schema2ClassGenerator {
 
     private fun namingBindings(spec: SchemaSpec): NamingBindings =
         spec.nameBindings.orNull?.asFile?.let(NamingBindings::fromFile) ?: NamingBindings.EMPTY
+
+    private fun Map<String, String>.toNullableKeyMap(): Map<String?, String> =
+        entries.associate { (key, value) -> (key as String?) to value }
+
 }

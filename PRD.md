@@ -179,6 +179,7 @@ enum class Color { RED, GREEN, BLUE }
       flatten to nullable properties), `xs:group`/`xs:attributeGroup`, element refs
 - [x] Namespace → package mapping (`NamespacePackageMapper`, see `docs/namespace-mapping.md`)
 - [x] `xs:import` / `xs:include` multi-file resolution (`parseWithImports`, one model per namespace)
+- [x] XML wire namespace overrides independent from package derivation
 
 ### Phase 3 — Advanced Type Mapping
 - [x] `oneOf`/`anyOf` → sealed class hierarchies (JSON Schema side)

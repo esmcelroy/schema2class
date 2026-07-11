@@ -733,6 +733,28 @@ class KotlinCodegenTest {
     }
 
     @Test
+    fun `xmlutil mode uses wire namespace instead of schema namespace`() {
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Envelope",
+            kotlinName = "Envelope",
+            documentation = null,
+            properties = emptyList(),
+        )
+        val xmlCodegen = KotlinCodegen(KotlinCodegen.Options(annotationMode = AnnotationMode.XMLUTIL))
+        val xmlModel = SchemaModel(
+            namespace = null,
+            packageName = pkg,
+            types = listOf(type),
+            sourceFormat = SourceFormat.XSD,
+            wireNamespace = "urn:wire:envelope",
+        )
+
+        val source = sourceFor(xmlCodegen.generate(xmlModel), "Envelope")
+
+        source shouldContain "namespace = \"urn:wire:envelope\""
+    }
+
+    @Test
     fun `xmlutil mode marks element-kind properties as XmlElement true`() {
         val type = TypeDefinition.ComplexType(
             schemaName = "Order",

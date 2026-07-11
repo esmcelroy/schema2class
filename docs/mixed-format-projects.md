@@ -66,6 +66,8 @@ val receivedPayload = Json.decodeFromString<TelemetryPayload>(received.payload)
 | `source` | required | required |
 | `packageName` | optional — omitted: derive from namespace(s) + resolve imports; set: single-document parse into that package | **required** |
 | `packageOverrides` | namespace URI → package map for multi-file resolution | ignored |
+| `wireNamespace` | optional XML wire namespace emitted in xmlutil annotations | ignored |
+| `wireNamespaceOverrides` | schema namespace URI → XML wire namespace map for multi-file XSD resolution | ignored |
 | `nameBindings` | ignored today | optional sidecar file for friendly generated names; see `docs/naming-bindings.md` |
 | `annotationMode` | `NONE` / `KOTLINX_SERIALIZATION` / `XMLUTIL` / `JACKSON` | same (XMLUTIL adds no value for JSON) |
 | `omitNulls` | in `JACKSON` mode emits class-level `@JsonInclude(JsonInclude.Include.NON_NULL)` | same; in kotlinx modes, pair nullable defaults with `Json { encodeDefaults = false }` |

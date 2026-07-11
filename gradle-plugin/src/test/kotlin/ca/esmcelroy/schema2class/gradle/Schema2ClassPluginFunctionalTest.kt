@@ -254,6 +254,42 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `wireNamespace emits xml namespace without changing explicit package`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    envelope {
+                        source = file('schemas/envelope.xsd')
+                        packageName = 'com.corp.envelope'
+                        annotationMode = 'XMLUTIL'
+                        wireNamespace = 'urn:wire:envelope'
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/envelope.xsd").writeText(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:complexType name="Envelope">
+                <xs:sequence>
+                  <xs:element name="id" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val generated = File(projectDir, "build/generated/schema2class/kotlin/com/corp/envelope/Envelope.kt")
+        generated.exists() shouldBe true
+        generated.readText() shouldContain "namespace = \"urn:wire:envelope\""
+    }
+
+    @Test
     fun `json schema without packageName fails with a clear message`() {
         writeProject(
             """

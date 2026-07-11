@@ -80,7 +80,7 @@ class KotlinCodegen(private val options: Options = Options()) {
     fun generate(model: SchemaModel): Map<String, String> {
         val result = mutableMapOf<String, String>()
         for (type in model.types) {
-            val source = generateSource(type, model.packageName, model.namespace, model.sourceFormat)
+            val source = generateSource(type, model.packageName, model.wireNamespace, model.sourceFormat)
             val relativePath = model.packageName.replace('.', '/') + "/" + type.kotlinName + ".kt"
             result[relativePath] = source
         }

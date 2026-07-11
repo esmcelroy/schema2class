@@ -52,3 +52,42 @@ so results are deterministic for a given schema set.
 
 The multi-file XSD import resolver (`schema2class-y7w`) and the Gradle plugin use
 `toPackages` so every imported namespace lands in a stable, distinct package.
+
+## Wire namespace overrides
+
+Package derivation and XML wire namespaces are independent. For XSD models,
+`SchemaModel.namespace` remains the schema namespace used for grouping and package
+mapping, while `SchemaModel.wireNamespace` is what xmlutil annotations emit.
+
+This matters for schemas with no `targetNamespace`, or contracts whose generated
+package should not mirror the XML namespace required on the wire.
+
+CLI:
+
+```bash
+schema2class generate \
+  --input envelope.xsd=com.corp.envelope \
+  --annotation-mode xmlutil \
+  --wire-namespace urn:wire:envelope
+```
+
+Gradle:
+
+```kotlin
+schema2class {
+    schemas {
+        create("envelope") {
+            source = file("schemas/envelope.xsd")
+            packageName = "com.corp.envelope"
+            annotationMode = "XMLUTIL"
+            wireNamespace = "urn:wire:envelope"
+        }
+    }
+}
+```
+
+For multi-namespace XSD graphs, use namespace-specific overrides:
+
+```kotlin
+wireNamespaceOverrides.put("urn:schema:money", "urn:wire:money")
+```
