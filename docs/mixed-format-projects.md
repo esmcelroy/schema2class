@@ -36,6 +36,9 @@ directory is wired into the main source set when the Kotlin JVM plugin is presen
 For Jackson output, set `omitNulls = true` on a schema to emit
 `@JsonInclude(JsonInclude.Include.NON_NULL)`. For kotlinx output, keep nullable
 defaults and configure the runtime encoder with `Json { encodeDefaults = false }`.
+For integer-valued enums in Jackson mode, set `enumUnknownFallback = true` to emit
+numeric `@JsonValue` serialization plus a `@JsonCreator` factory that maps
+unrecognized wire values to `UNKNOWN`.
 
 ## Using the generated classes together
 
@@ -72,3 +75,7 @@ val receivedPayload = Json.decodeFromString<TelemetryPayload>(received.payload)
 | `annotationMode` | `NONE` / `KOTLINX_SERIALIZATION` / `XMLUTIL` / `JACKSON` | same (XMLUTIL adds no value for JSON) |
 | `omitNulls` | in `JACKSON` mode emits class-level `@JsonInclude(JsonInclude.Include.NON_NULL)` | same; in kotlinx modes, pair nullable defaults with `Json { encodeDefaults = false }` |
 | `enforceConstraints` | emits `require` guards for supported ranges, lengths, patterns, and list cardinality | same |
+| `enumUnknownFallback` | in `JACKSON` mode, integer enum restrictions emit numeric wire values and opt-in `UNKNOWN` fallback | same for integer-valued JSON Schema enums; kotlinx numeric unknown fallback is not generated yet |
+
+The equivalent CLI flag is `--enum-unknown-fallback`, used with
+`--annotation-mode jackson`.

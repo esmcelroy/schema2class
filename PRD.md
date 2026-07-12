@@ -195,6 +195,7 @@ enum class Color { RED, GREEN, BLUE }
 - [x] Friendly generated-name pipeline for JSON Schema: strategy hook, sidecar
       bindings, `x-object-name`/`x-object-type`, and sanitized `title` conventions
 - [x] Optional runtime constraint enforcement via generated `require` guards
+- [x] Integer-valued enum wire values with opt-in Jackson `UNKNOWN` fallback
 
 ### Phase 4 — Build Tooling
 - [x] Gradle plugin (`schema2classGenerate` task; mixed .xsd/.json specs with

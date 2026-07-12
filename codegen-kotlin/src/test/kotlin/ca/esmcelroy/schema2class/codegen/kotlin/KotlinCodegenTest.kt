@@ -297,6 +297,65 @@ class KotlinCodegenTest {
         source shouldContain "// \"2\""
     }
 
+    @Test
+    fun `jackson numeric enum with unknown fallback emits value creator and json value`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "BulbState",
+            kotlinName = "BulbState",
+            documentation = null,
+            values = listOf(
+                EnumValue(serializedValue = "0", kotlinName = "OFF", documentation = null),
+                EnumValue(serializedValue = "1", kotlinName = "ON", documentation = null),
+                EnumValue(serializedValue = "3", kotlinName = "FLASHING", documentation = null),
+            ),
+            baseType = PrimitiveType.INT,
+        )
+        val jacksonCodegen = KotlinCodegen(
+            KotlinCodegen.Options(
+                annotationMode = AnnotationMode.JACKSON,
+                enumUnknownFallback = true,
+            ),
+        )
+
+        val source = sourceFor(jacksonCodegen.generate(model(type)), "BulbState")
+
+        source shouldContain "enum class BulbState("
+        source shouldContain "@JsonValue"
+        source shouldContain "val wireValue: Int"
+        source shouldContain "OFF(0)"
+        source shouldContain "UNKNOWN(-1)"
+        source shouldContain "@JsonCreator"
+        source shouldContain "@JvmStatic"
+        source shouldContain "fun fromValue(wireValue: Int): BulbState"
+        source.replace(Regex("\\s+"), " ") shouldContain "entries.firstOrNull { it.wireValue == wireValue }"
+        source shouldContain "?: UNKNOWN"
+    }
+
+    @Test
+    fun `jackson numeric enum keeps existing unknown fallback member`() {
+        val type = TypeDefinition.EnumType(
+            schemaName = "BulbState",
+            kotlinName = "BulbState",
+            documentation = null,
+            values = listOf(
+                EnumValue(serializedValue = "0", kotlinName = "OFF", documentation = null),
+                EnumValue(serializedValue = "999", kotlinName = "UNKNOWN", documentation = null),
+            ),
+            baseType = PrimitiveType.INT,
+        )
+        val jacksonCodegen = KotlinCodegen(
+            KotlinCodegen.Options(
+                annotationMode = AnnotationMode.JACKSON,
+                enumUnknownFallback = true,
+            ),
+        )
+
+        val source = sourceFor(jacksonCodegen.generate(model(type)), "BulbState")
+
+        source shouldContain "UNKNOWN(999)"
+        source shouldNotContain "UNKNOWN(-1)"
+    }
+
     // -----------------------------------------------------------------------
     // 4. UnionType → sealed class with inner data class subtypes
     // -----------------------------------------------------------------------

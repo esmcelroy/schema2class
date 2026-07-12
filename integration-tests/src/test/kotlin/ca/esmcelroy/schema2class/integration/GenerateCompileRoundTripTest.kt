@@ -8,7 +8,11 @@ import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
 import ca.esmcelroy.schema2class.codegen.kotlin.AnnotationMode
 import ca.esmcelroy.schema2class.codegen.kotlin.KotlinCodegen
+import ca.esmcelroy.schema2class.core.ir.EnumValue
+import ca.esmcelroy.schema2class.core.ir.PrimitiveType
 import ca.esmcelroy.schema2class.core.ir.SchemaModel
+import ca.esmcelroy.schema2class.core.ir.SourceFormat
+import ca.esmcelroy.schema2class.core.ir.TypeDefinition
 import ca.esmcelroy.schema2class.parser.jsonschema.JsonSchemaParser
 import ca.esmcelroy.schema2class.parser.xsd.XsdParser
 import kotlinx.serialization.json.Json
@@ -222,6 +226,42 @@ class GenerateCompileRoundTripTest {
         val xsdModel = XsdParser().parse(fixtureFile("business-doc.xsd"), "com.example.jacksonxml")
 
         compile(jacksonCodegen.generate(jsonModel) + jacksonCodegen.generate(xsdModel))
+    }
+
+    @Test
+    fun `jackson numeric enum serializes numbers and deserializes unknown fallback`() {
+        val jacksonCodegen = KotlinCodegen(
+            KotlinCodegen.Options(
+                annotationMode = AnnotationMode.JACKSON,
+                enumUnknownFallback = true,
+            ),
+        )
+        val model = SchemaModel(
+            namespace = null,
+            packageName = "com.example.numericenum",
+            types = listOf(
+                TypeDefinition.EnumType(
+                    schemaName = "BulbState",
+                    kotlinName = "BulbState",
+                    documentation = null,
+                    values = listOf(
+                        EnumValue(serializedValue = "0", kotlinName = "OFF", documentation = null),
+                        EnumValue(serializedValue = "1", kotlinName = "ON", documentation = null),
+                        EnumValue(serializedValue = "3", kotlinName = "FLASHING", documentation = null),
+                    ),
+                    baseType = PrimitiveType.INT,
+                ),
+            ),
+            sourceFormat = SourceFormat.JSON_SCHEMA,
+        )
+        val result = compile(jacksonCodegen.generate(model))
+        val enumClass = result.classLoader.loadClass("com.example.numericenum.BulbState")
+        val constants = enumClass.enumConstants.associateBy { it.toString() }
+        val mapper = JsonMapper.builder().build()
+
+        mapper.writeValueAsString(constants.getValue("OFF")) shouldBe "0"
+        mapper.readValue("3", enumClass).toString() shouldBe "FLASHING"
+        mapper.readValue("999", enumClass).toString() shouldBe "UNKNOWN"
     }
 
     // ── XSD: xmlutil mode round-trips an actual XML document ─────────────────

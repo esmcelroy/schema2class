@@ -82,6 +82,28 @@ class XsdParserTest {
         enum.values.map { it.kotlinName } shouldBe listOf("RED", "GREEN_BLUE", "YELLOW")
     }
 
+    @Test
+    fun `integer simpleType enumeration keeps numeric base type`() {
+        val model = parse(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="BulbState">
+                <xs:restriction base="xs:int">
+                  <xs:enumeration value="0"/>
+                  <xs:enumeration value="1"/>
+                  <xs:enumeration value="3"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>
+            """
+        )
+
+        val enum = model.types.filterIsInstance<TypeDefinition.EnumType>()
+            .find { it.schemaName == "BulbState" }.shouldNotBeNull()
+        enum.baseType shouldBe PrimitiveType.INT
+        enum.values.map { it.serializedValue } shouldBe listOf("0", "1", "3")
+    }
+
     // ── Test 4: enum with ccts:Name annotation (UNECE pattern) ───────────────
 
     @Test

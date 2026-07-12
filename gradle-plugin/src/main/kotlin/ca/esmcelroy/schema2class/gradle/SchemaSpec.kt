@@ -76,11 +76,16 @@ abstract class SchemaSpec @javax.inject.Inject constructor(
     @get:Input
     abstract val enforceConstraints: Property<Boolean>
 
+    /** Emit synthetic UNKNOWN enum members for supported annotation modes. */
+    @get:Input
+    abstract val enumUnknownFallback: Property<Boolean>
+
     init {
         annotationMode.convention("NONE")
         valueClasses.convention(false)
         omitNulls.convention(false)
         enforceConstraints.convention(false)
+        enumUnknownFallback.convention(false)
         packageOverrides.convention(emptyMap())
         wireNamespaceOverrides.convention(emptyMap())
     }

@@ -142,6 +142,36 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `enum unknown fallback flag emits jackson numeric enum fallback`() {
+        val schema = File(workDir, "bulb-state.xsd").apply {
+            writeText(
+                """
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:simpleType name="BulbState">
+                    <xs:restriction base="xs:int">
+                      <xs:enumeration value="0"/>
+                      <xs:enumeration value="1"/>
+                      <xs:enumeration value="3"/>
+                    </xs:restriction>
+                  </xs:simpleType>
+                </xs:schema>
+                """.trimIndent(),
+            )
+        }
+        val out = File(workDir, "out")
+
+        val result = cli().test(
+            "generate -i ${schema.path}=com.corp.payload -o ${out.path} " +
+                "--annotation-mode jackson --enum-unknown-fallback",
+        )
+
+        result.statusCode shouldBe 0
+        val generated = File(out, "com/corp/payload/BulbState.kt").readText()
+        generated shouldContain "@JsonValue"
+        generated shouldContain "UNKNOWN(-1)"
+    }
+
+    @Test
     fun `name bindings file overrides generated json property names`() {
         val schema = File(workDir, "payload.schema.json").apply {
             writeText(

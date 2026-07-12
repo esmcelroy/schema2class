@@ -25,6 +25,7 @@ internal object Schema2ClassGenerator {
                 generateValueClasses = spec.valueClasses.get(),
                 omitNulls = spec.omitNulls.get(),
                 enforceConstraints = spec.enforceConstraints.get(),
+                enumUnknownFallback = spec.enumUnknownFallback.get(),
             ),
         )
         parseModels(spec).forEach { model -> writeModel(codegen, model, outDir) }

@@ -179,6 +179,47 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `enumUnknownFallback emits jackson numeric enum fallback`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    payload {
+                        source = file('schemas/bulb-state.xsd')
+                        packageName = 'com.corp.payload'
+                        annotationMode = 'JACKSON'
+                        enumUnknownFallback = true
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/bulb-state.xsd").writeText(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:simpleType name="BulbState">
+                <xs:restriction base="xs:int">
+                  <xs:enumeration value="0"/>
+                  <xs:enumeration value="1"/>
+                  <xs:enumeration value="3"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:schema>
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val generated = File(
+            projectDir,
+            "build/generated/schema2class/kotlin/com/corp/payload/BulbState.kt",
+        ).readText()
+        generated shouldContain "@JsonValue"
+        generated shouldContain "UNKNOWN(-1)"
+    }
+
+    @Test
     fun `verify generated passes when output is current`() {
         writeProject(
             """

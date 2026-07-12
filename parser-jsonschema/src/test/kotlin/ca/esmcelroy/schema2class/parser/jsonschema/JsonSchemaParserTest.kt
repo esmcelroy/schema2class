@@ -74,6 +74,30 @@ class JsonSchemaParserTest {
         enumType.values.map { it.kotlinName } shouldBe listOf("RED", "GREEN_BLUE", "YELLOW")
     }
 
+    @Test
+    fun `integer enum keeps numeric base type and values`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "BulbState": {
+                  "type": "integer",
+                  "enum": [0, 1, 3]
+                }
+              }
+            }
+            """
+        )
+
+        val enumType = model.types
+            .filterIsInstance<TypeDefinition.EnumType>()
+            .find { it.schemaName == "BulbState" }
+            .shouldNotBeNull()
+
+        enumType.baseType shouldBe PrimitiveType.INT
+        enumType.values.map { it.serializedValue } shouldBe listOf("0", "1", "3")
+    }
+
     // ── Test 3: $ref to definitions — TypeRef.Named, definition in model ──
 
     @Test

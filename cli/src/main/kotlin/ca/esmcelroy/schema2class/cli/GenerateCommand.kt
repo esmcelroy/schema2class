@@ -75,6 +75,11 @@ class GenerateCommand : CliktCommand(
         help = "Emit init require guards for supported schema constraints",
     ).flag(default = false)
 
+    private val enumUnknownFallback: Boolean by option(
+        "--enum-unknown-fallback",
+        help = "Emit synthetic UNKNOWN enum members for supported annotation modes",
+    ).flag(default = false)
+
     private val packageOverrides: Map<String, String> by option(
         "--package-override",
         metavar = "NAMESPACE=PACKAGE",
@@ -113,6 +118,7 @@ class GenerateCommand : CliktCommand(
                 generateValueClasses = valueClasses,
                 omitNulls = omitNulls,
                 enforceConstraints = enforceConstraints,
+                enumUnknownFallback = enumUnknownFallback,
             ),
         )
         val fileCount = inputs.sumOf { generate(input = it, codegen = codegen) }
