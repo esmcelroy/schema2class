@@ -1,0 +1,36 @@
+site_name: schema2class
+site_description: Kotlin-native XSD and JSON Schema to Kotlin code generation.
+site_url: https://esmcelroy.github.io/schema2class/
+repo_url: https://github.com/esmcelroy/schema2class
+repo_name: esmcelroy/schema2class
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.instant
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Programmatic API: programmatic-api.md
+  - Compatibility Matrix: compatibility.md
+  - Annotation Modes: annotation-modes.md
+  - Configuration Reference: configuration.md
+  - Guides:
+      - Mixed-Format Projects: mixed-format-projects.md
+      - Naming Bindings: naming-bindings.md
+      - Namespace Mapping: namespace-mapping.md
+      - DTD and RELAX NG Conversion: trang-conversion.md
+  - Contributing: contributing.md
+  - Background:
+      - Domain Survey: domain-survey.md

@@ -22,3 +22,6 @@ samples/
 
 # analysis
 .scannerwork/
+
+# docs
+site/

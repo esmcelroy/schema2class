@@ -218,7 +218,7 @@ enum class Color { RED, GREEN, BLUE }
       JSON document round-trip via Jackson; XML document round-trips arrive
       with the annotation modes)
 - [ ] Publishing to Maven Central
-- [ ] Documentation site
+- [x] Documentation site
 
 ---
 
