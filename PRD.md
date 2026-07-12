@@ -77,8 +77,9 @@ Remaining extension points, ranked by the July 2026 domain survey (`docs/domain-
 2. **WSDL types frontend** — extract the XSD embedded in `<wsdl:types>` and feed the
    existing parser. Typed SOAP payloads without generating service stubs (which remain
    out of scope). Today's alternative is JAXWS → Java.
-3. **DTD / RELAX NG via trang** — do not write parsers for these; document (and
-   optionally wrap in the CLI) a trang conversion step (DTD/RNG → XSD → schema2class).
+3. **DTD / RELAX NG via trang** — do not write parsers for these; keep the
+   documented conversion step (DTD/RNG/RNC → XSD → schema2class). A wrapper can
+   be reconsidered only if users ask for it.
 4. **OpenAPI 3.1** — embeds JSON Schema 2020-12; our JSON Schema parser is the reuse
    path. Fabrikt owns OpenAPI 3.0 today; no head-on competition planned.
 

@@ -85,13 +85,22 @@ classes (the hard 80%) while explicitly *not* generating service stubs/bindings
 
 ### DTD and RELAX NG — low value, near-zero cost via conversion
 
-- The samples dir already contains `xbel-1.0.dtd`.
 - [trang](https://relaxng.org/jclark/trang-manual.html) (James Clark, BSD,
   [jing-trang](https://github.com/relaxng/jing-trang)) converts DTD and RELAX NG
-  (both syntaxes) to XSD. It is barely maintained but stable and feature-complete.
-- Recommendation: do **not** write DTD/RNG parsers. Document (and optionally wrap in
-  the CLI) a trang conversion step: DTD/RNG → XSD → schema2class. RELAX NG demand is
-  a publishing niche (DocBook, TEI, ODF); DTD demand is legacy. See
+  (both syntaxes) to XSD. The upstream repository is still alive enough for this
+  purpose, with a 2024 release and `org.relaxng:trang` artifacts on Maven Central.
+- Direct parser support is still not justified. DTD and RELAX NG are full schema
+  languages with their own naming, namespace, include, datatype, and constraint
+  semantics; implementing them directly would duplicate a mature converter while
+  expanding the IR surface in ways that only a niche set of users need.
+- Bundling Trang by default is also not warranted for v1: most users will never
+  touch DTD/RNG/RNC, and adding the dependency would pull legacy XML conversion
+  code into every CLI/plugin distribution. If demand appears, a dedicated
+  optional `schema2classConvertSchemas` task or CLI subcommand can shell out to
+  `trang` or use `org.relaxng:trang` in an isolated module.
+- Recommendation: do **not** write DTD/RNG parsers. Keep the documented conversion
+  path: DTD/RNG/RNC → XSD → schema2class. RELAX NG demand is a publishing niche
+  (DocBook, TEI, ODF); DTD demand is legacy. See
   [trang-conversion.md](trang-conversion.md) for the operational recipe.
 
 ### Jackson XML — fold into existing bead
@@ -124,4 +133,5 @@ description updated.
 - https://www.brightec.co.uk/blog/wsdl-client-generation-with-kotlin-and-gradle
 - https://github.com/relaxng/jing-trang
 - https://relaxng.org/jclark/trang-manual.html
+- https://mvnrepository.com/artifact/org.relaxng/trang
 - https://lobehub.com/skills/myrealtrip-air-claudecode-xsd-to-kotlin

@@ -3,10 +3,22 @@
 schema2class does not implement DTD or RELAX NG parsers. Use `trang` to convert
 those schema formats to XSD, then run schema2class on the generated XSD.
 
+## Decision
+
+Direct DTD and RELAX NG parser support is intentionally out of scope. Trang
+already implements these schema frontends and can emit XSD, which is the XML
+schema format schema2class owns directly. Keeping conversion outside the core
+parser avoids duplicating schema-language semantics that are only needed for
+legacy DTDs and publishing-oriented RELAX NG contracts.
+
+schema2class may add an optional wrapper later if users need one, but the default
+CLI and Gradle plugin should not bundle Trang or pull it into every install.
+
 ## Install trang
 
 Use the `jing-trang` distribution from <https://github.com/relaxng/jing-trang>.
-The upstream tool is stable and BSD-licensed.
+The upstream tool is stable, BSD-licensed, and published as `org.relaxng:trang`
+for JVM builds that want to manage it through Maven/Gradle.
 
 Common package-manager names vary by platform, so verify the installed command:
 
