@@ -374,7 +374,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         namespace: String?,
     ): Pair<TypeSpec, Map<String, String>> {
         if (jacksonMode && options.enumUnknownFallback && type.baseType.isIntegerEnumType) {
-            return generateJacksonNumericEnumType(type, namespace) to emptyMap()
+            return JacksonNumericEnumGenerator.generate(type, options.omitNulls) to emptyMap()
         }
 
         val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
@@ -403,77 +403,6 @@ class KotlinCodegen(private val options: Options = Options()) {
 
         return typeBuilder.build() to commentMap
     }
-
-    private fun generateJacksonNumericEnumType(
-        type: TypeDefinition.EnumType,
-        namespace: String?,
-    ): TypeSpec {
-        val valueType = primitiveToTypeName(type.baseType)
-        val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
-            .primaryConstructor(
-                FunSpec.constructorBuilder()
-                    .addParameter("wireValue", valueType)
-                    .build(),
-            )
-            .addProperty(
-                PropertySpec.builder("wireValue", valueType)
-                    .initializer("wireValue")
-                    .addAnnotation(JSON_VALUE)
-                    .build(),
-            )
-        addTypeAnnotations(typeBuilder, type.schemaName, type.kotlinName, namespace)
-        type.documentation?.let { typeBuilder.addKdoc("%L", it.toKdocText()) }
-
-        val values = addUnknownEnumValue(type)
-        values.forEach { value ->
-            typeBuilder.addEnumConstant(
-                value.kotlinName,
-                enumConstantType(
-                    value,
-                    null,
-                    CodeBlock.of("%L", numericEnumLiteral(type.baseType, value.serializedValue)),
-                ),
-            )
-        }
-
-        typeBuilder.addType(jacksonNumericEnumCompanion(type, valueType))
-        return typeBuilder.build()
-    }
-
-    private fun addUnknownEnumValue(type: TypeDefinition.EnumType): List<EnumValue> {
-        if (type.values.any { it.kotlinName == "UNKNOWN" }) return type.values
-        return type.values + EnumValue(
-            serializedValue = unknownSerializedValue(type),
-            kotlinName = "UNKNOWN",
-            documentation = "Fallback for unrecognized wire values.",
-        )
-    }
-
-    private fun unknownSerializedValue(type: TypeDefinition.EnumType): String {
-        val used = type.values.mapNotNull { it.serializedValue.toLongOrNull() }.toSet()
-        var candidate = -1L
-        while (candidate in used) candidate--
-        return candidate.toString()
-    }
-
-    private fun numericEnumLiteral(type: PrimitiveType, value: String): String =
-        when (type) {
-            PrimitiveType.LONG -> "${value}L"
-            else -> value
-        }
-
-    private fun jacksonNumericEnumCompanion(type: TypeDefinition.EnumType, valueType: TypeName): TypeSpec =
-        TypeSpec.companionObjectBuilder()
-            .addFunction(
-                FunSpec.builder("fromValue")
-                    .addAnnotation(JVM_STATIC)
-                    .addAnnotation(JSON_CREATOR)
-                    .addParameter("wireValue", valueType)
-                    .returns(ClassName("", type.kotlinName))
-                    .addStatement("return entries.firstOrNull { it.wireValue == wireValue } ?: UNKNOWN")
-                    .build(),
-            )
-            .build()
 
     private fun enumConstantType(
         value: EnumValue,
@@ -837,8 +766,6 @@ class KotlinCodegen(private val options: Options = Options()) {
         val CONTEXTUAL = ClassName("kotlinx.serialization", "Contextual")
         val JSON_PROPERTY = ClassName("com.fasterxml.jackson.annotation", "JsonProperty")
         val JSON_INCLUDE = ClassName("com.fasterxml.jackson.annotation", "JsonInclude")
-        val JSON_VALUE = ClassName("com.fasterxml.jackson.annotation", "JsonValue")
-        val JSON_CREATOR = ClassName("com.fasterxml.jackson.annotation", "JsonCreator")
         val JACKSON_XML_PROPERTY =
             ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlProperty")
         val JACKSON_XML_ELEMENT_WRAPPER =
@@ -846,7 +773,6 @@ class KotlinCodegen(private val options: Options = Options()) {
         val JACKSON_XML_TEXT =
             ClassName("com.fasterxml.jackson.dataformat.xml.annotation", "JacksonXmlText")
         val JVM_INLINE = ClassName("kotlin.jvm", "JvmInline")
-        val JVM_STATIC = ClassName("kotlin.jvm", "JvmStatic")
         val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
         val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
         val PRIMITIVE_SERIAL_DESCRIPTOR =
@@ -865,4 +791,113 @@ class KotlinCodegen(private val options: Options = Options()) {
         val JSON_CLASS_DISCRIMINATOR =
             ClassName("kotlinx.serialization.json", "JsonClassDiscriminator")
     }
+}
+
+private object JacksonNumericEnumGenerator {
+    private val JSON_VALUE = ClassName("com.fasterxml.jackson.annotation", "JsonValue")
+    private val JSON_CREATOR = ClassName("com.fasterxml.jackson.annotation", "JsonCreator")
+    private val JSON_INCLUDE = ClassName("com.fasterxml.jackson.annotation", "JsonInclude")
+    private val JVM_STATIC = ClassName("kotlin.jvm", "JvmStatic")
+
+    fun generate(
+        type: TypeDefinition.EnumType,
+        omitNulls: Boolean,
+    ): TypeSpec {
+        val valueType = integerTypeName(type.baseType)
+        val typeBuilder = TypeSpec.enumBuilder(type.kotlinName)
+            .primaryConstructor(
+                FunSpec.constructorBuilder()
+                    .addParameter("wireValue", valueType)
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("wireValue", valueType)
+                    .initializer("wireValue")
+                    .addAnnotation(JSON_VALUE)
+                    .build(),
+            )
+        addAnnotations(typeBuilder, type, omitNulls)
+
+        addUnknownEnumValue(type).forEach { value ->
+            typeBuilder.addEnumConstant(
+                value.kotlinName,
+                enumConstantType(
+                    value,
+                    CodeBlock.of("%L", numericEnumLiteral(type.baseType, value.serializedValue)),
+                ),
+            )
+        }
+
+        typeBuilder.addType(companion(type, valueType))
+        return typeBuilder.build()
+    }
+
+    private fun addAnnotations(
+        typeBuilder: TypeSpec.Builder,
+        type: TypeDefinition.EnumType,
+        omitNulls: Boolean,
+    ) {
+        type.documentation?.let { typeBuilder.addKdoc("%L", it.toKdocText()) }
+        if (omitNulls) {
+            typeBuilder.addAnnotation(jsonIncludeNonNullAnnotation())
+        }
+    }
+
+    private fun addUnknownEnumValue(type: TypeDefinition.EnumType): List<EnumValue> {
+        if (type.values.any { it.kotlinName == "UNKNOWN" }) return type.values
+        return type.values + EnumValue(
+            serializedValue = unknownSerializedValue(type),
+            kotlinName = "UNKNOWN",
+            documentation = "Fallback for unrecognized wire values.",
+        )
+    }
+
+    private fun unknownSerializedValue(type: TypeDefinition.EnumType): String {
+        val used = type.values.mapNotNull { it.serializedValue.toLongOrNull() }.toSet()
+        var candidate = -1L
+        while (candidate in used) candidate--
+        return candidate.toString()
+    }
+
+    private fun enumConstantType(value: EnumValue, constructorArg: CodeBlock): TypeSpec {
+        val builder = TypeSpec.anonymousClassBuilder()
+            .addSuperclassConstructorParameter("%L", constructorArg)
+        value.documentation?.let { builder.addKdoc("%L", it.toKdocText()) }
+        return builder.build()
+    }
+
+    private fun numericEnumLiteral(type: PrimitiveType, value: String): String =
+        when (type) {
+            PrimitiveType.LONG -> "${value}L"
+            else -> value
+        }
+
+    private fun integerTypeName(type: PrimitiveType): TypeName =
+        when (type) {
+            PrimitiveType.LONG -> Long::class.asClassName()
+            else -> Int::class.asClassName()
+        }
+
+    private fun companion(type: TypeDefinition.EnumType, valueType: TypeName): TypeSpec =
+        TypeSpec.companionObjectBuilder()
+            .addFunction(
+                FunSpec.builder("fromValue")
+                    .addAnnotation(JVM_STATIC)
+                    .addAnnotation(JSON_CREATOR)
+                    .addParameter("wireValue", valueType)
+                    .returns(ClassName("", type.kotlinName))
+                    .addStatement("return entries.firstOrNull { it.wireValue == wireValue } ?: UNKNOWN")
+                    .build(),
+            )
+            .build()
+
+    private fun jsonIncludeNonNullAnnotation(): AnnotationSpec =
+        AnnotationSpec.builder(JSON_INCLUDE)
+            .addMember("%T.%L", JSON_INCLUDE.nestedClass("Include"), "NON_NULL")
+            .build()
+
+    private fun String.toKdocText(): String =
+        replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace("*/", "* /")
 }
