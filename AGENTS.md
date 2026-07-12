@@ -1,15 +1,16 @@
 # Agent Instructions
 
-**Project context, build commands, architecture, and conventions live in
-[CLAUDE.md](CLAUDE.md)** — read that first; it is the single source of truth
-for project norms. Highlights:
+Project context, build commands, architecture, and conventions live in
+[CLAUDE.md](CLAUDE.md). Read that first; it is the single source of truth for
+project norms. Highlights:
 
 - schema2class: Kotlin-native XSD + JSON Schema → Kotlin codegen. IR in `core/`
   is the contract between parsers and codegen.
 - Build: `source "$HOME/.sdkman/bin/sdkman-init.sh" && ./gradlew test`
   (SDKMAN Java is not on the default PATH — every Gradle command needs this).
 - Track ALL work in beads (`bd`); never TodoWrite/markdown TODOs.
-- No git remote yet: session completion = committed + beads closed + tests green.
+- A git remote exists. Session completion means committed, beads closed, quality
+  gates green, and pushed to `origin/main`.
 
 ## Non-Interactive Shell Commands
 
@@ -34,6 +35,21 @@ cp -rf source dest          # NOT: cp -r source dest
 - `ssh` - use `-o BatchMode=yes` to fail instead of prompting
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+
+## Documentation
+
+- Root overview: [README.md](README.md)
+- Product plan and phase checklist: [PRD.md](PRD.md)
+- User docs source: [docs/](docs/)
+- MkDocs config: [mkdocs.yml](mkdocs.yml)
+- Deployed docs: <http://esmcelroy.ca/schema2class/>
+
+Build docs locally with:
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs build --strict
+```
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
@@ -81,6 +97,3 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
-
-> **Local-only exception to the block above:** this repository currently has NO
-> git remote — the pull/push steps do not apply until one exists (see CLAUDE.md).
