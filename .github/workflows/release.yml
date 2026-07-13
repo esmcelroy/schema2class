@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 0.1.0"
+        required: true
+        default: "0.1.0"
+      dry_run:
+        description: "Build and publish to Maven local only"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ORG_GRADLE_PROJECT_VERSION_NAME: ${{ inputs.version }}
+      ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_USERNAME }}
+      ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_PASSWORD }}
+      ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+      ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+      GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+      GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify
+        run: ./gradlew --no-daemon test detekt jacocoRootReport
+
+      - name: Build CLI distributions
+        run: ./gradlew --no-daemon :cli:distZip :cli:distTar
+
+      - name: Publish to Maven local
+        if: ${{ inputs.dry_run }}
+        run: ./gradlew --no-daemon publishToMavenLocal
+
+      - name: Publish to Maven Central and Gradle Plugin Portal
+        if: ${{ !inputs.dry_run }}
+        run: ./gradlew --no-daemon publishAndReleaseToMavenCentral :gradle-plugin:publishPlugins
+
+      - name: Create GitHub release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            cli/build/distributions/schema2class-${{ inputs.version }}.zip \
+            cli/build/distributions/schema2class-${{ inputs.version }}.tar \
+            --title "schema2class ${{ inputs.version }}" \
+            --notes "schema2class ${{ inputs.version }}"
+
+      - name: Upload CLI distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema2class-cli-${{ inputs.version }}
+          path: |
+            cli/build/distributions/schema2class-${{ inputs.version }}.zip
+            cli/build/distributions/schema2class-${{ inputs.version }}.tar
+          if-no-files-found: error

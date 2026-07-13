@@ -1,24 +1,46 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.plugins.signing.Sign
 import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
 import org.gradle.testing.jacoco.tasks.JacocoReport
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.maven.publish) apply false
+    alias(libs.plugins.plugin.publish) apply false
     jacoco
 }
 
 val versionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
+val releaseGroup = providers.gradleProperty("GROUP").get()
+val releaseVersion = providers.gradleProperty("VERSION_NAME").get()
+val hasSigningKey = providers.gradleProperty("signingInMemoryKey").isPresent ||
+    providers.gradleProperty("signing.secretKeyRingFile").isPresent
+val publishableProjects = setOf(
+    "core",
+    "parser-xsd",
+    "parser-jsonschema",
+    "codegen-kotlin",
+    "cli",
+    "gradle-plugin",
+)
 
 repositories {
     mavenCentral()
 }
+
+group = releaseGroup
+version = releaseVersion
 
 extensions.configure<JacocoPluginExtension> {
     toolVersion = versionCatalog.findVersion("jacoco").get().requiredVersion
 }
 
 subprojects {
+    group = releaseGroup
+    version = releaseVersion
+
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "io.gitlab.arturbosch.detekt")
     apply(plugin = "jacoco")
@@ -76,6 +98,45 @@ subprojects {
             txt.required.set(false)
             sarif.required.set(true)
             md.required.set(false)
+        }
+    }
+
+    tasks.withType<Sign>().configureEach {
+        onlyIf("a signing key is configured") { hasSigningKey }
+    }
+
+    if (name in publishableProjects) {
+        apply(plugin = "com.vanniktech.maven.publish")
+
+        extensions.configure<MavenPublishBaseExtension> {
+            publishToMavenCentral()
+            signAllPublications()
+            coordinates(releaseGroup, project.name, releaseVersion)
+            pom {
+                name.set("schema2class ${project.name}")
+                description.set("Kotlin-native XSD and JSON Schema code generation (${project.name})")
+                inceptionYear.set("2026")
+                url.set("https://github.com/esmcelroy/schema2class")
+                licenses {
+                    license {
+                        name.set("The Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("esmcelroy")
+                        name.set("Eric McElroy")
+                        url.set("https://github.com/esmcelroy")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/esmcelroy/schema2class")
+                    connection.set("scm:git:https://github.com/esmcelroy/schema2class.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/esmcelroy/schema2class.git")
+                }
+            }
         }
     }
 }

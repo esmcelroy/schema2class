@@ -75,6 +75,7 @@ schema2class generate \
 - Getting started: [docs/getting-started.md](docs/getting-started.md)
 - Configuration reference: [docs/configuration.md](docs/configuration.md)
 - Compatibility matrix: [docs/compatibility.md](docs/compatibility.md)
+- Release process: [docs/release.md](docs/release.md)
 - Product plan: [PRD.md](PRD.md)
 
 ## Repository Layout

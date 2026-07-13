@@ -26,6 +26,7 @@ nav:
   - Compatibility Matrix: compatibility.md
   - Annotation Modes: annotation-modes.md
   - Configuration Reference: configuration.md
+  - Release Process: release.md
   - Guides:
       - Mixed-Format Projects: mixed-format-projects.md
       - Naming Bindings: naming-bindings.md

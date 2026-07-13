@@ -4,6 +4,7 @@ plugins {
 
 application {
     mainClass.set("ca.esmcelroy.schema2class.cli.Schema2ClassCliKt")
+    applicationName = "schema2class"
 }
 
 dependencies {

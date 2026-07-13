@@ -10,6 +10,8 @@ kotlinx-serialization = "1.6.3"
 xmlutil = "0.86.3"
 detekt = "1.23.8"
 jacoco = "0.8.13"
+maven-publish = "0.35.0"
+plugin-publish = "2.1.1"
 
 [libraries]
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -30,3 +32,5 @@ xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
+plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "plugin-publish" }

@@ -25,3 +25,8 @@ samples/
 
 # docs
 site/
+
+# signing / release secrets
+*.asc
+*.gpg
+*.kbx
