@@ -89,6 +89,7 @@ parser-jsonschema/    JSON Schema draft-07 → IR. Jackson. parseWithRefs() reso
 codegen-kotlin/       IR → Kotlin source via KotlinPoet. AnnotationMode:
                       NONE | KOTLINX_SERIALIZATION | XMLUTIL (superset, adds
                       @XmlSerialName/@XmlElement/@XmlValue from PropertyKind)
+                      | JACKSON
 cli/                  Clikt: schema2class generate -i FILE[=PACKAGE]... (mixed formats)
 gradle-plugin/        id "ca.esmcelroy.schema2class", schema2classGenerate task,
                       schema2class { schemas { ... } } DSL, source-set wiring

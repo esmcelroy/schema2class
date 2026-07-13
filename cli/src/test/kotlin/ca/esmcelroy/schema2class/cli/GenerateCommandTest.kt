@@ -142,6 +142,43 @@ class GenerateCommandTest {
     }
 
     @Test
+    fun `json external refs generate referenced document models`() {
+        val common = File(workDir, "common.json").apply {
+            writeText(
+                """
+                {
+                  "title": "Address",
+                  "type": "object",
+                  "properties": {
+                    "street": { "type": "string" }
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val order = File(workDir, "order.schema.json").apply {
+            writeText(
+                """
+                {
+                  "title": "Order",
+                  "type": "object",
+                  "properties": {
+                    "shipTo": { "${'$'}ref": "${common.name}" }
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val out = File(workDir, "out")
+
+        val result = cli().test("generate -i ${order.path}=com.corp.order -o ${out.path}")
+
+        result.statusCode shouldBe 0
+        File(out, "com/corp/order/Order.kt").readText() shouldContain "com.corp.order.common.Address"
+        File(out, "com/corp/order/common/Address.kt").exists() shouldBe true
+    }
+
+    @Test
     fun `enum unknown fallback flag emits jackson numeric enum fallback`() {
         val schema = File(workDir, "bulb-state.xsd").apply {
             writeText(
@@ -270,6 +307,25 @@ class GenerateCommandTest {
         result.statusCode shouldBe 1
         result.stderr shouldContain "convert it to XSD with trang first"
         result.stderr shouldContain "docs/trang-conversion.md"
+    }
+
+    @Test
+    fun `wsdl without embedded schemas fails clearly`() {
+        val wsdl = File(workDir, "empty.wsdl").apply {
+            writeText(
+                """
+                <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+                  <wsdl:types/>
+                </wsdl:definitions>
+                """.trimIndent(),
+            )
+        }
+
+        val result = cli().test("generate -i ${wsdl.path}=com.acme -o ${File(workDir, "out").path}")
+
+        result.statusCode shouldBe 1
+        result.stderr shouldContain "failed to parse WSDL"
+        result.stderr shouldContain "contains no xs:schema"
     }
 
     @Test

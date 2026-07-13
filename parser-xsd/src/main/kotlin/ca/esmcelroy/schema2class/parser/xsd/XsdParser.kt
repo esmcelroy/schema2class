@@ -398,6 +398,10 @@ class XsdParser {
                 ?.let { result += Constraint.MinValue(it) }
             xsdChild(restriction, "maxInclusive")?.getAttribute("value")?.ifBlank { null }
                 ?.let { result += Constraint.MaxValue(it) }
+            xsdChild(restriction, "minExclusive")?.getAttribute("value")?.ifBlank { null }
+                ?.let { result += Constraint.MinValueExclusive(it) }
+            xsdChild(restriction, "maxExclusive")?.getAttribute("value")?.ifBlank { null }
+                ?.let { result += Constraint.MaxValueExclusive(it) }
             xsdChild(restriction, "totalDigits")?.getAttribute("value")?.toIntOrNull()
                 ?.let { result += Constraint.TotalDigits(it) }
             xsdChild(restriction, "fractionDigits")?.getAttribute("value")?.toIntOrNull()

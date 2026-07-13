@@ -8,11 +8,14 @@ import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
 import ca.esmcelroy.schema2class.codegen.kotlin.AnnotationMode
 import ca.esmcelroy.schema2class.codegen.kotlin.KotlinCodegen
+import ca.esmcelroy.schema2class.core.ir.Constraint
 import ca.esmcelroy.schema2class.core.ir.EnumValue
 import ca.esmcelroy.schema2class.core.ir.PrimitiveType
+import ca.esmcelroy.schema2class.core.ir.PropertyDefinition
 import ca.esmcelroy.schema2class.core.ir.SchemaModel
 import ca.esmcelroy.schema2class.core.ir.SourceFormat
 import ca.esmcelroy.schema2class.core.ir.TypeDefinition
+import ca.esmcelroy.schema2class.core.ir.TypeRef
 import ca.esmcelroy.schema2class.parser.jsonschema.JsonSchemaParser
 import ca.esmcelroy.schema2class.parser.xsd.XsdParser
 import kotlinx.serialization.json.Json
@@ -118,6 +121,43 @@ class GenerateCompileRoundTripTest {
         val depClass = result.classLoader.loadClass("org.apache.maven.pom.Dependency")
         val dep = depClass.getDeclaredConstructor().newInstance()
         depClass.getMethod("getGroupId").invoke(dep) shouldBe null
+    }
+
+    @Test
+    fun `value classes with enforced constraints compile`() {
+        val alias = TypeDefinition.AliasType(
+            schemaName = "CurrencyCode",
+            kotlinName = "CurrencyCode",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+            constraints = listOf(Constraint.ExactLength(3), Constraint.Pattern("[A-Z]{3}")),
+        )
+        val price = TypeDefinition.ComplexType(
+            schemaName = "Price",
+            kotlinName = "Price",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currency",
+                    kotlinName = "currency",
+                    type = TypeRef.Named("CurrencyCode"),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val model = SchemaModel(
+            namespace = null,
+            packageName = "com.example.valueconstraints",
+            types = listOf(alias, price),
+            sourceFormat = SourceFormat.XSD,
+        )
+        val guardedCodegen = KotlinCodegen(
+            KotlinCodegen.Options(generateValueClasses = true, enforceConstraints = true),
+        )
+
+        compile(guardedCodegen.generate(model))
     }
 
     // ── JSON Schema: compile + Jackson document round-trip ───────────────────

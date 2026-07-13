@@ -140,7 +140,7 @@ class GenerateCommand : CliktCommand(
     private fun parseModels(input: SchemaInput): List<SchemaModel> =
         when (input.file.extension.lowercase()) {
             "xsd" -> parseXsd(input)
-            "json" -> listOf(parseJsonSchema(input))
+            "json" -> parseJsonSchema(input)
             "wsdl" -> parseWsdl(input)
             "dtd", "rng", "rnc" -> throw UsageError(
                 "schema2class does not parse ${input.file.extension} directly; " +
@@ -175,21 +175,26 @@ class GenerateCommand : CliktCommand(
             )
         }
 
-    private fun parseJsonSchema(input: SchemaInput): SchemaModel {
+    private fun parseJsonSchema(input: SchemaInput): List<SchemaModel> {
         val packageName = input.packageName
             ?: throw UsageError(
                 "JSON Schema input '${input.file.name}' requires a package: " +
                     "--input ${input.file}=com.example.generated",
             )
-        return JsonSchemaParser(namingBindings = namingBindings).parse(input.file, packageName)
+        return JsonSchemaParser(namingBindings = namingBindings).parseWithRefs(input.file, packageName)
     }
 
+    @Suppress("SwallowedException")
     private fun parseWsdl(input: SchemaInput): List<SchemaModel> {
         val mapper = NamespacePackageMapper(
             basePackage = input.packageName ?: basePackage,
             overrides = packageOverrides,
         )
-        return WsdlParser().parse(input.file, mapper)
+        return try {
+            WsdlParser().parse(input.file, mapper)
+        } catch (e: IllegalArgumentException) {
+            throw UsageError("failed to parse WSDL '${input.file.name}': ${e.message}")
+        }
     }
 
     private fun Map<String, String>.toNullableKeyMap(): Map<String?, String> =

@@ -3,9 +3,13 @@ package ca.esmcelroy.schema2class.gradle
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileTree
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import java.io.File
 
@@ -16,6 +20,10 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
 
     @get:OutputDirectory
     abstract val outputDirectory: DirectoryProperty
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    fun getSchemaDependencyFiles(): FileTree = schemaDependencyFileTree()
 
     init {
         group = "schema2class"
@@ -44,5 +52,19 @@ abstract class Schema2ClassGenerateTask : DefaultTask() {
         canonicalOutDir.mkdirs()
         return canonicalOutDir
     }
+
+    private fun schemaDependencyFileTree(): FileTree =
+        project.files(
+            specs.get().mapNotNull { spec ->
+                spec.source.orNull?.asFile?.parentFile
+            },
+        ).asFileTree.matching { patterns ->
+            patterns.include("**/*.xsd")
+            patterns.include("**/*.wsdl")
+            patterns.include("**/*.json")
+            patterns.include("**/*.schema")
+            patterns.include("**/*.schema.json")
+            patterns.include("**/*.conf")
+        }
 
 }

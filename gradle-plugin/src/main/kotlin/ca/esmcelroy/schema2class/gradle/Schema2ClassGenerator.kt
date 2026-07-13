@@ -35,7 +35,7 @@ internal object Schema2ClassGenerator {
         val source = spec.source.get().asFile
         return when (source.extension.lowercase()) {
             "xsd" -> parseXsd(spec, source)
-            "json" -> listOf(parseJsonSchema(spec, source))
+            "json" -> parseJsonSchema(spec, source)
             "wsdl" -> parseWsdl(spec, source)
             else -> throw GradleException(
                 "schema2class: cannot detect schema format of '${source.name}' " +
@@ -68,12 +68,12 @@ internal object Schema2ClassGenerator {
         }
     }
 
-    private fun parseJsonSchema(spec: SchemaSpec, source: File): SchemaModel {
+    private fun parseJsonSchema(spec: SchemaSpec, source: File): List<SchemaModel> {
         val packageName = spec.packageName.orNull
             ?: throw GradleException(
                 "schema2class: spec '${spec.name}' is a JSON Schema and requires packageName",
             )
-        return JsonSchemaParser(namingBindings = namingBindings(spec)).parse(source, packageName)
+        return JsonSchemaParser(namingBindings = namingBindings(spec)).parseWithRefs(source, packageName)
     }
 
     private fun parseWsdl(spec: SchemaSpec, source: File): List<SchemaModel> {
@@ -81,18 +81,24 @@ internal object Schema2ClassGenerator {
             basePackage = spec.packageName.orNull,
             overrides = spec.packageOverrides.get(),
         )
-        return WsdlParser().parse(source, mapper)
+        return try {
+            WsdlParser().parse(source, mapper)
+        } catch (e: IllegalArgumentException) {
+            throw GradleException("schema2class: failed to parse WSDL '${source.name}': ${e.message}", e)
+        }
     }
 
     private fun parseAnnotationMode(spec: SchemaSpec): AnnotationMode {
         val raw = spec.annotationMode.get()
-        return try {
-            AnnotationMode.valueOf(raw.uppercase().replace('-', '_'))
-        } catch (e: IllegalArgumentException) {
-            throw GradleException(
+        val normalized = raw.lowercase().replace('_', '-')
+        return when (normalized) {
+            "none" -> AnnotationMode.NONE
+            "kotlinx", "kotlinx-serialization" -> AnnotationMode.KOTLINX_SERIALIZATION
+            "xmlutil" -> AnnotationMode.XMLUTIL
+            "jackson" -> AnnotationMode.JACKSON
+            else -> throw GradleException(
                 "schema2class: spec '${spec.name}' has unknown annotationMode '$raw' " +
-                    "(expected one of ${AnnotationMode.entries.joinToString()})",
-                e,
+                    "(expected none, kotlinx, xmlutil, jackson, or enum-style names)",
             )
         }
     }

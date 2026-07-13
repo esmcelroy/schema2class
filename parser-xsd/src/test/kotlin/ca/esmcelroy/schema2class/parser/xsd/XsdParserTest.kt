@@ -265,6 +265,8 @@ class XsdParserTest {
                   <xs:minLength value="1"/>
                   <xs:maxLength value="100"/>
                   <xs:pattern value="[a-z]+"/>
+                  <xs:minExclusive value="0"/>
+                  <xs:maxExclusive value="10"/>
                   <xs:totalDigits value="12"/>
                   <xs:fractionDigits value="2"/>
                 </xs:restriction>
@@ -279,6 +281,8 @@ class XsdParserTest {
         alias.constraints shouldContain Constraint.MinLength(1)
         alias.constraints shouldContain Constraint.MaxLength(100)
         alias.constraints shouldContain Constraint.Pattern("[a-z]+")
+        alias.constraints shouldContain Constraint.MinValueExclusive("0")
+        alias.constraints shouldContain Constraint.MaxValueExclusive("10")
         alias.constraints shouldContain Constraint.TotalDigits(12)
         alias.constraints shouldContain Constraint.FractionDigits(2)
     }

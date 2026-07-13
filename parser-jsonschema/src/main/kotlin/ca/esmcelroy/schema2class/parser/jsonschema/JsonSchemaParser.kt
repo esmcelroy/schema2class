@@ -25,7 +25,6 @@ import java.io.InputStream
  *
  * Out of scope for v1 (see TODOs inside):
  * - `not`, `if/then/else` combiners
- * - External `$ref` (cross-file) — emits `TypeRef.Named` with a warning
  * - Unknown JSON Schema `format` keywords — treated as plain STRING
  * - `$defs` is treated identically to `definitions`
  */
@@ -102,10 +101,13 @@ class JsonSchemaParser(
                     return@resolver TypeRef.Named(toPascalCase(simpleName.ifEmpty { "External" }))
                 }
                 if (!models.containsKey(target.path)) queue.addLast(target)
-                val name = pointer.substringAfterLast('/').ifBlank { null }
-                    ?: rootTypeName(mapper.readTree(target))
+                val targetRoot = mapper.readTree(target)
+                val targetNode = externalPointerTarget(targetRoot, pointer) ?: targetRoot
+                val schemaName = pointer.substringAfterLast('/').ifBlank { null }
+                    ?: rootSchemaName(targetRoot)
                     ?: target.name.removeSuffix(".json").removeSuffix(".schema")
-                TypeRef.Named(toPascalCase(name), packageName = packageFor(target))
+                val kotlinName = externalTypeKotlinName(schemaName, targetNode)
+                TypeRef.Named(kotlinName, packageName = packageFor(target))
             }
 
             val root = doc.inputStream().use { mapper.readTree(it) }
@@ -120,15 +122,40 @@ class JsonSchemaParser(
 
         return models.values.toList()
     }
+
+    private fun externalTypeKotlinName(schemaName: String, node: JsonNode): String {
+        val title = node.get("title")?.textValue()?.ifBlank { null }
+        val context = NamingContext(
+            target = NamingTarget.TYPE,
+            schemaName = schemaName,
+            title = title,
+        )
+        return namingStrategy?.nameFor(context)?.let(::toPascalCase)
+            ?: namingBindings.typeName(schemaName)?.let(::toPascalCase)
+            ?: node.get("x-object-type")?.textValue()?.ifBlank { null }?.let(::toPascalCase)
+            ?: title?.let(::toPascalCase)
+            ?: toPascalCase(schemaName)
+    }
 }
 
 /** The name parse() will give a document's root object type, or null if it has none. */
-private fun rootTypeName(root: JsonNode): String? {
+private fun rootSchemaName(root: JsonNode): String? {
     if (root.get("type")?.textValue() != "object" && !root.has("properties")) return null
     return root.get("title")?.textValue()
         ?: root.get("\$id")?.textValue()
             ?.substringAfterLast("/")?.removeSuffix(".json")?.removeSuffix(".schema")
         ?: "Root"
+}
+
+private fun externalPointerTarget(root: JsonNode, pointer: String): JsonNode? {
+    if (pointer.isBlank()) return root
+    var node: JsonNode? = root
+    for (part in pointer.removePrefix("/").split("/")) {
+        val decoded = part.replace("~1", "/").replace("~0", "~")
+        node = node?.get(decoded)
+        if (node == null) break
+    }
+    return node
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -742,6 +769,8 @@ private class ParseContext(
         node.get("pattern")?.textValue()?.let { cs.add(Constraint.Pattern(it)) }
         node.get("minimum")?.let { cs.add(Constraint.MinValue(it.asText())) }
         node.get("maximum")?.let { cs.add(Constraint.MaxValue(it.asText())) }
+        node.get("exclusiveMinimum")?.let { cs.add(Constraint.MinValueExclusive(it.asText())) }
+        node.get("exclusiveMaximum")?.let { cs.add(Constraint.MaxValueExclusive(it.asText())) }
         node.get("minItems")?.intValue()?.let { cs.add(Constraint.MinItems(it)) }
         node.get("maxItems")?.intValue()?.let { cs.add(Constraint.MaxItems(it)) }
         return cs

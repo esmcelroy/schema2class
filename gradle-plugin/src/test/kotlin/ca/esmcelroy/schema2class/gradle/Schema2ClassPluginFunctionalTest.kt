@@ -104,6 +104,59 @@ class Schema2ClassPluginFunctionalTest {
     }
 
     @Test
+    fun `editing included xsd invalidates generate task`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    catalog { source = file('schemas/catalog.xsd') }
+                }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/common.xsd").writeText(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                       targetNamespace="urn:test:catalog"
+                       xmlns="urn:test:catalog"
+                       elementFormDefault="qualified">
+              <xs:complexType name="SharedType">
+                <xs:sequence>
+                  <xs:element name="code" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/catalog.xsd").writeText(
+            """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                       targetNamespace="urn:test:catalog"
+                       xmlns="urn:test:catalog"
+                       elementFormDefault="qualified">
+              <xs:include schemaLocation="common.xsd"/>
+              <xs:complexType name="Catalog">
+                <xs:sequence>
+                  <xs:element name="shared" type="SharedType"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:schema>
+            """.trimIndent(),
+        )
+
+        runner("schema2classGenerate").build()
+        val second = runner("schema2classGenerate").build()
+        second.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.UP_TO_DATE
+
+        File(projectDir, "schemas/common.xsd").appendText("\n<!-- invalidate -->\n")
+        val third = runner("schema2classGenerate").build()
+
+        third.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.SUCCESS
+    }
+
+    @Test
     fun `omitNulls emits jackson non null inclusion`() {
         writeProject(
             """
@@ -127,6 +180,31 @@ class Schema2ClassPluginFunctionalTest {
 
         File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
             .readText() shouldContain "@JsonInclude(JsonInclude.Include.NON_NULL)"
+    }
+
+    @Test
+    fun `annotationMode accepts cli shorthand in gradle configuration`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    payload {
+                        source = file('schemas/payload.schema.json')
+                        packageName = 'com.corp.payload'
+                        annotationMode = 'kotlinx'
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("schema2classGenerate").build()
+        result.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.SUCCESS
+
+        File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
+            .readText() shouldContain "@Serializable"
     }
 
     @Test
@@ -176,6 +254,53 @@ class Schema2ClassPluginFunctionalTest {
         runner("schema2classGenerate").build()
         File(projectDir, "build/generated/schema2class/kotlin/com/corp/payload/TelemetryPayload.kt")
             .readText() shouldContain "require(deviceId.length >= 1)"
+    }
+
+    @Test
+    fun `json external refs generate referenced document models`() {
+        writeProject(
+            """
+            plugins { id 'ca.esmcelroy.schema2class' }
+
+            schema2class {
+                schemas {
+                    order {
+                        source = file('schemas/order.schema.json')
+                        packageName = 'com.corp.order'
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/common.json").writeText(
+            """
+            {
+              "title": "Address",
+              "type": "object",
+              "properties": {
+                "street": { "type": "string" }
+              }
+            }
+            """.trimIndent(),
+        )
+        File(projectDir, "schemas/order.schema.json").writeText(
+            """
+            {
+              "title": "Order",
+              "type": "object",
+              "properties": {
+                "shipTo": { "${'$'}ref": "common.json" }
+              }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("schema2classGenerate").build()
+        result.task(":schema2classGenerate")?.outcome shouldBe TaskOutcome.SUCCESS
+
+        val outDir = File(projectDir, "build/generated/schema2class/kotlin")
+        File(outDir, "com/corp/order/Order.kt").readText() shouldContain "com.corp.order.common.Address"
+        File(outDir, "com/corp/order/common/Address.kt").exists() shouldBe true
     }
 
     @Test

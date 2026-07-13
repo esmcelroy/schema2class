@@ -28,7 +28,7 @@ schema2class {
 | `verifyDirectory` | Directory | `outputDirectory` | extension | Directory compared by `schema2classVerifyGenerated`. |
 | `source` | File | required | schema | `.xsd`, `.wsdl`, or `.json` schema file. |
 | `packageName` | String | XSD: derived, JSON: required | schema | Explicit output package. For WSDL, used as a base package. |
-| `annotationMode` | String | `NONE` | schema | `NONE`, `KOTLINX_SERIALIZATION`, `XMLUTIL`, or `JACKSON`. |
+| `annotationMode` | String | `NONE` | schema | `NONE`, `KOTLINX_SERIALIZATION`, `XMLUTIL`, or `JACKSON`; CLI shorthands `none`, `kotlinx`, `xmlutil`, and `jackson` are also accepted. |
 | `valueClasses` | Boolean | `false` | schema | Emit constrained simple scalar types as `@JvmInline value class`. |
 | `omitNulls` | Boolean | `false` | schema | Emit Jackson non-null inclusion metadata. |
 | `enforceConstraints` | Boolean | `false` | schema | Emit generated `require` guards for supported constraints. |

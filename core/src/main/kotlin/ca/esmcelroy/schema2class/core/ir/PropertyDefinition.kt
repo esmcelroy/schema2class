@@ -45,6 +45,8 @@ sealed class Constraint {
     data class Pattern(val regex: String) : Constraint()
     data class MinValue(val value: String) : Constraint()
     data class MaxValue(val value: String) : Constraint()
+    data class MinValueExclusive(val value: String) : Constraint()
+    data class MaxValueExclusive(val value: String) : Constraint()
     data class TotalDigits(val value: Int) : Constraint()
     data class FractionDigits(val value: Int) : Constraint()
     data class MinItems(val value: Int) : Constraint()

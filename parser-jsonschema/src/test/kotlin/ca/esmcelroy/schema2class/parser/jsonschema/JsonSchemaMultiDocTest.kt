@@ -7,9 +7,13 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
 class JsonSchemaMultiDocTest {
+
+    @TempDir
+    lateinit var tempDir: File
 
     private val parser = JsonSchemaParser()
 
@@ -45,6 +49,47 @@ class JsonSchemaMultiDocTest {
         // The shared Address type is generated exactly once, in common's package
         val commonTypes = models.first { it.packageName == "com.shop.common" }.types
         commonTypes.count { it.kotlinName == "Address" } shouldBe 1
+    }
+
+    @Test
+    fun `external pointer refs use target schema naming metadata`() {
+        val common = File(tempDir, "common.json").apply {
+            writeText(
+                """
+                {
+                  "definitions": {
+                    "Address": {
+                      "title": "PostalAddress",
+                      "type": "object",
+                      "properties": {
+                        "street": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val order = File(tempDir, "order.schema.json").apply {
+            writeText(
+                """
+                {
+                  "title": "Order",
+                  "type": "object",
+                  "properties": {
+                    "billing": { "${'$'}ref": "${common.name}#/definitions/Address" }
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+
+        val models = parser.parseWithRefs(order, "com.shop")
+
+        val orderType = complexType(models, "com.shop", "Order")
+        orderType.properties.find { it.schemaName == "billing" }.shouldNotBeNull()
+            .type shouldBe TypeRef.Named("PostalAddress", "com.shop.common")
+        complexType(models, "com.shop.common", "PostalAddress")
     }
 
     @Test

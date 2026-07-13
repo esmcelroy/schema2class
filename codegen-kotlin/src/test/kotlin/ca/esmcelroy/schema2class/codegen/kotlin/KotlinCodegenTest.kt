@@ -132,7 +132,12 @@ class KotlinCodegenTest {
                     nullable = false,
                     defaultValue = null,
                     documentation = null,
-                    constraints = listOf(Constraint.MinValue("0"), Constraint.MaxValue("15")),
+                    constraints = listOf(
+                        Constraint.MinValue("0"),
+                        Constraint.MaxValue("15"),
+                        Constraint.MinValueExclusive("-1"),
+                        Constraint.MaxValueExclusive("16"),
+                    ),
                 ),
                 PropertyDefinition(
                     schemaName = "label",
@@ -160,6 +165,8 @@ class KotlinCodegenTest {
 
         source shouldContain "require(confidence >= 0)"
         source shouldContain "require(confidence <= 15)"
+        source shouldContain "require(confidence > -1)"
+        source shouldContain "require(confidence < 16)"
         source shouldContain "require(label == null || (label.length >= 2))"
         source shouldContain "require(label == null || (label.matches(\"[A-Z]+\".toRegex())))"
         source shouldContain "require(readings.size >= 1)"
@@ -196,6 +203,44 @@ class KotlinCodegenTest {
         val source = sourceFor(guardedCodegen.generate(model(alias, type)), "Record")
 
         source shouldContain "require(id.length <= 12)"
+    }
+
+    @Test
+    fun `value class aliases own their constraint guards when enforcement is enabled`() {
+        val alias = TypeDefinition.AliasType(
+            schemaName = "CurrencyCode",
+            kotlinName = "CurrencyCode",
+            documentation = null,
+            aliasedType = TypeRef.Primitive(PrimitiveType.STRING),
+            constraints = listOf(Constraint.ExactLength(3), Constraint.Pattern("[A-Z]{3}")),
+        )
+        val type = TypeDefinition.ComplexType(
+            schemaName = "Price",
+            kotlinName = "Price",
+            documentation = null,
+            properties = listOf(
+                PropertyDefinition(
+                    schemaName = "currency",
+                    kotlinName = "currency",
+                    type = TypeRef.Named("CurrencyCode"),
+                    nullable = false,
+                    defaultValue = null,
+                    documentation = null,
+                ),
+            ),
+        )
+        val guardedCodegen = KotlinCodegen(
+            KotlinCodegen.Options(generateValueClasses = true, enforceConstraints = true),
+        )
+
+        val sources = guardedCodegen.generate(model(alias, type))
+        val currencySource = sourceFor(sources, "CurrencyCode")
+        val priceSource = sourceFor(sources, "Price")
+
+        currencySource shouldContain "require(`value`.length == 3)"
+        currencySource shouldContain "require(`value`.matches(\"[A-Z]{3}\".toRegex()))"
+        priceSource shouldNotContain "currency.length"
+        priceSource shouldNotContain "currency.matches"
     }
 
     @Test
@@ -1138,5 +1183,27 @@ class KotlinCodegenTest {
         assert(sources.containsKey("ca/example/Foo.kt")) {
             "Expected key 'ca/example/Foo.kt' but got keys: ${sources.keys}"
         }
+    }
+
+    @Test
+    fun `colliding top level type names are suffixed instead of overwritten`() {
+        val first = TypeDefinition.ComplexType(
+            schemaName = "foo-bar",
+            kotlinName = "FooBar",
+            documentation = null,
+            properties = emptyList(),
+        )
+        val second = TypeDefinition.ComplexType(
+            schemaName = "fooBar",
+            kotlinName = "FooBar",
+            documentation = null,
+            properties = emptyList(),
+        )
+
+        val sources = generate(first, second)
+
+        sources.keys shouldBe setOf("ca/example/FooBar.kt", "ca/example/FooBar2.kt")
+        sourceFor(sources, "FooBar") shouldContain "class FooBar"
+        sourceFor(sources, "FooBar2") shouldContain "class FooBar2"
     }
 }

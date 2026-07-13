@@ -3,8 +3,10 @@ package ca.esmcelroy.schema2class.gradle
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileTree
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.Optional
@@ -25,6 +27,10 @@ abstract class Schema2ClassVerifyGeneratedTask : DefaultTask() {
 
     @get:Internal
     abstract val workDirectory: DirectoryProperty
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    fun getSchemaDependencyFiles(): FileTree = schemaDependencyFileTree()
 
     init {
         group = "schema2class"
@@ -93,6 +99,20 @@ abstract class Schema2ClassVerifyGeneratedTask : DefaultTask() {
             .filter { it.isFile }
             .associateBy { root.toPath().relativize(it.toPath()).toString().replace(File.separatorChar, '/') }
     }
+
+    private fun schemaDependencyFileTree(): FileTree =
+        project.files(
+            specs.get().mapNotNull { spec ->
+                spec.source.orNull?.asFile?.parentFile
+            },
+        ).asFileTree.matching { patterns ->
+            patterns.include("**/*.xsd")
+            patterns.include("**/*.wsdl")
+            patterns.include("**/*.json")
+            patterns.include("**/*.schema")
+            patterns.include("**/*.schema.json")
+            patterns.include("**/*.conf")
+        }
 
     private companion object {
         const val MAX_DIFFERENCES = 50

@@ -10,12 +10,12 @@ Maven Central artifacts:
 
 | Artifact | Purpose |
 |---|---|
-| `ca.esmcelroy.schema2class:core` | Shared IR, naming, and package mapping APIs. |
-| `ca.esmcelroy.schema2class:parser-xsd` | XSD and WSDL frontend. |
-| `ca.esmcelroy.schema2class:parser-jsonschema` | JSON Schema frontend. |
-| `ca.esmcelroy.schema2class:codegen-kotlin` | KotlinPoet code generator. |
-| `ca.esmcelroy.schema2class:cli` | Command-line application artifact. |
-| `ca.esmcelroy.schema2class:gradle-plugin` | Gradle plugin implementation artifact. |
+| `ca.esmcelroy.schema2class:schema2class-core` | Shared IR, naming, and package mapping APIs. |
+| `ca.esmcelroy.schema2class:schema2class-parser-xsd` | XSD and WSDL frontend. |
+| `ca.esmcelroy.schema2class:schema2class-parser-jsonschema` | JSON Schema frontend. |
+| `ca.esmcelroy.schema2class:schema2class-codegen-kotlin` | KotlinPoet code generator. |
+| `ca.esmcelroy.schema2class:schema2class-cli` | Command-line application artifact. |
+| `ca.esmcelroy.schema2class:schema2class-gradle-plugin` | Gradle plugin implementation artifact. |
 
 Gradle Plugin Portal:
 

@@ -7,6 +7,14 @@ application {
     applicationName = "schema2class"
 }
 
+distributions {
+    main {
+        contents {
+            from(rootProject.file("LICENSE"))
+        }
+    }
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":parser-jsonschema"))

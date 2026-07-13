@@ -10,6 +10,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.jupiter.api.Test
 
+@Suppress("LargeClass")
 class JsonSchemaParserTest {
 
     private val parser = JsonSchemaParser()
@@ -382,6 +383,29 @@ class JsonSchemaParserTest {
         alias.constraints shouldContain ca.esmcelroy.schema2class.core.ir.Constraint.MinLength(1)
         alias.constraints shouldContain ca.esmcelroy.schema2class.core.ir.Constraint.MaxLength(255)
         alias.constraints shouldContain ca.esmcelroy.schema2class.core.ir.Constraint.Pattern("^[a-z]+\$")
+    }
+
+    @Test
+    fun `numeric exclusive range constraints are captured`() {
+        val model = parse(
+            """
+            {
+              "definitions": {
+                "Confidence": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "exclusiveMaximum": 1
+                }
+              }
+            }
+            """,
+        )
+        val alias = model.types
+            .filterIsInstance<TypeDefinition.AliasType>()
+            .find { it.schemaName == "Confidence" }
+            .shouldNotBeNull()
+        alias.constraints shouldContain ca.esmcelroy.schema2class.core.ir.Constraint.MinValueExclusive("0")
+        alias.constraints shouldContain ca.esmcelroy.schema2class.core.ir.Constraint.MaxValueExclusive("1")
     }
 
     @Test

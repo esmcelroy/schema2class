@@ -55,6 +55,7 @@ enum class AnnotationMode {
     JACKSON,
 }
 
+@Suppress("LargeClass")
 class KotlinCodegen(private val options: Options = Options()) {
 
     data class Options(
@@ -82,13 +83,70 @@ class KotlinCodegen(private val options: Options = Options()) {
      */
     fun generate(model: SchemaModel): Map<String, String> {
         val result = mutableMapOf<String, String>()
-        val typeIndex = model.types.associateBy { it.kotlinName }
-        for (type in model.types) {
+        val normalizedTypes = normalizeTypeNames(model.types)
+        val typeIndex = normalizedTypes.associateBy { it.kotlinName }
+        for (type in normalizedTypes) {
             val source = generateSource(type, model.packageName, model.wireNamespace, model.sourceFormat, typeIndex)
             val relativePath = model.packageName.replace('.', '/') + "/" + type.kotlinName + ".kt"
             result[relativePath] = source
         }
         return result
+    }
+
+    private fun normalizeTypeNames(types: List<TypeDefinition>): List<TypeDefinition> {
+        val used = mutableMapOf<String, Int>()
+        val renamedBySchemaName = mutableMapOf<String, String>()
+        val renamed = types.map { type ->
+            val count = (used[type.kotlinName] ?: 0) + 1
+            used[type.kotlinName] = count
+            if (count == 1) {
+                type
+            } else {
+                val newName = "${type.kotlinName}$count"
+                renamedBySchemaName[type.schemaName] = newName
+                System.err.println(
+                    "Warning: Kotlin type name collision for schema type '${type.schemaName}', " +
+                        "renaming generated type ${type.kotlinName} to $newName",
+                )
+                type.withKotlinName(newName)
+            }
+        }
+        if (renamedBySchemaName.isEmpty()) return renamed
+        return renamed.map { it.rewriteTypeRefs(renamedBySchemaName) }
+    }
+
+    private fun TypeDefinition.withKotlinName(newName: String): TypeDefinition = when (this) {
+        is TypeDefinition.ComplexType -> copy(kotlinName = newName)
+        is TypeDefinition.EnumType -> copy(kotlinName = newName)
+        is TypeDefinition.UnionType -> copy(kotlinName = newName)
+        is TypeDefinition.AliasType -> copy(kotlinName = newName)
+    }
+
+    private fun TypeDefinition.rewriteTypeRefs(renamedBySchemaName: Map<String, String>): TypeDefinition = when (this) {
+        is TypeDefinition.ComplexType -> copy(
+            properties = properties.map { it.rewriteTypeRefs(renamedBySchemaName) },
+            superType = superType?.rewriteTypeRefs(renamedBySchemaName),
+            contentProperty = contentProperty?.rewriteTypeRefs(renamedBySchemaName),
+        )
+        is TypeDefinition.EnumType -> this
+        is TypeDefinition.UnionType -> copy(
+            variants = variants.map { it.copy(type = it.type.rewriteTypeRefs(renamedBySchemaName)) },
+        )
+        is TypeDefinition.AliasType -> copy(aliasedType = aliasedType.rewriteTypeRefs(renamedBySchemaName))
+    }
+
+    private fun PropertyDefinition.rewriteTypeRefs(renamedBySchemaName: Map<String, String>): PropertyDefinition =
+        copy(type = type.rewriteTypeRefs(renamedBySchemaName))
+
+    private fun TypeRef.rewriteTypeRefs(renamedBySchemaName: Map<String, String>): TypeRef = when (this) {
+        is TypeRef.Named ->
+            if (packageName == null) copy(name = renamedBySchemaName[name] ?: name) else this
+        is TypeRef.ListOf -> copy(element = element.rewriteTypeRefs(renamedBySchemaName))
+        is TypeRef.MapOf -> copy(
+            key = key.rewriteTypeRefs(renamedBySchemaName),
+            value = value.rewriteTypeRefs(renamedBySchemaName),
+        )
+        is TypeRef.Primitive -> this
     }
 
     private fun generateSource(
@@ -248,12 +306,18 @@ class KotlinCodegen(private val options: Options = Options()) {
         val block = CodeBlock.builder()
         var hasChecks = false
         for (prop in properties) {
-            val constraints = prop.constraints + aliasConstraints(prop.type, typeIndex)
+            val alias = aliasType(prop.type, typeIndex)
+            val constraints = prop.constraints + if (alias.isGeneratedValueClassAlias()) {
+                emptyList()
+            } else {
+                alias?.constraints.orEmpty()
+            }
+            val target = constraintTarget(prop, typeIndex)
             for (constraint in constraints) {
                 val condition = constraintCondition(
                     prop,
                     constraint,
-                    effectiveTypeRef(prop.type, typeIndex),
+                    target,
                 ) ?: continue
                 block.addStatement("require(%L) { %S }", condition, constraintMessage(prop, constraint))
                 hasChecks = true
@@ -264,18 +328,39 @@ class KotlinCodegen(private val options: Options = Options()) {
         }
     }
 
-    private fun aliasConstraints(ref: TypeRef, typeIndex: Map<String, TypeDefinition>): List<Constraint> =
-        ((ref as? TypeRef.Named)?.name?.let(typeIndex::get) as? TypeDefinition.AliasType)?.constraints.orEmpty()
+    private fun aliasType(ref: TypeRef, typeIndex: Map<String, TypeDefinition>): TypeDefinition.AliasType? =
+        (ref as? TypeRef.Named)?.name?.let(typeIndex::get) as? TypeDefinition.AliasType
 
-    private fun effectiveTypeRef(ref: TypeRef, typeIndex: Map<String, TypeDefinition>): TypeRef =
-        ((ref as? TypeRef.Named)?.name?.let(typeIndex::get) as? TypeDefinition.AliasType)?.aliasedType ?: ref
+    private fun TypeDefinition.AliasType?.isGeneratedValueClassAlias(): Boolean =
+        this != null && options.generateValueClasses && constraints.isNotEmpty()
+
+    private data class ConstraintTarget(
+        val expression: CodeBlock,
+        val type: TypeRef,
+    )
+
+    private fun constraintTarget(
+        prop: PropertyDefinition,
+        typeIndex: Map<String, TypeDefinition>,
+    ): ConstraintTarget {
+        val alias = aliasType(prop.type, typeIndex)
+        val expression = if (alias.isGeneratedValueClassAlias()) {
+            CodeBlock.of("%N.value", prop.kotlinName)
+        } else {
+            CodeBlock.of("%N", prop.kotlinName)
+        }
+        return ConstraintTarget(
+            expression = expression,
+            type = alias?.aliasedType ?: prop.type,
+        )
+    }
 
     private fun constraintCondition(
         prop: PropertyDefinition,
         constraint: Constraint,
-        ref: TypeRef,
+        target: ConstraintTarget,
     ): CodeBlock? {
-        val raw = rawConstraintCondition(prop, constraint, ref) ?: return null
+        val raw = rawConstraintCondition(target.expression, constraint, target.type) ?: return null
         return if (prop.nullable) {
             CodeBlock.of("%N == null || (%L)", prop.kotlinName, raw)
         } else {
@@ -283,28 +368,30 @@ class KotlinCodegen(private val options: Options = Options()) {
         }
     }
 
-    private fun rawConstraintCondition(prop: PropertyDefinition, constraint: Constraint, ref: TypeRef): CodeBlock? =
+    private fun rawConstraintCondition(subject: CodeBlock, constraint: Constraint, ref: TypeRef): CodeBlock? =
         when (constraint) {
-            is Constraint.ExactLength -> lengthCondition(prop, ref, "==", constraint.value)
-            is Constraint.MinLength -> lengthCondition(prop, ref, ">=", constraint.value)
-            is Constraint.MaxLength -> lengthCondition(prop, ref, "<=", constraint.value)
+            is Constraint.ExactLength -> lengthCondition(subject, ref, "==", constraint.value)
+            is Constraint.MinLength -> lengthCondition(subject, ref, ">=", constraint.value)
+            is Constraint.MaxLength -> lengthCondition(subject, ref, "<=", constraint.value)
             is Constraint.Pattern -> stringCondition(ref) {
-                CodeBlock.of("%N.matches(%S.toRegex())", prop.kotlinName, constraint.regex)
+                CodeBlock.of("%L.matches(%S.toRegex())", subject, constraint.regex)
             }
-            is Constraint.MinValue -> numericCondition(prop, ref, ">=", constraint.value)
-            is Constraint.MaxValue -> numericCondition(prop, ref, "<=", constraint.value)
+            is Constraint.MinValue -> numericCondition(subject, ref, ">=", constraint.value)
+            is Constraint.MaxValue -> numericCondition(subject, ref, "<=", constraint.value)
+            is Constraint.MinValueExclusive -> numericCondition(subject, ref, ">", constraint.value)
+            is Constraint.MaxValueExclusive -> numericCondition(subject, ref, "<", constraint.value)
             is Constraint.TotalDigits -> decimalCondition(ref) {
-                CodeBlock.of("%N.precision() <= %L", prop.kotlinName, constraint.value)
+                CodeBlock.of("%L.precision() <= %L", subject, constraint.value)
             }
             is Constraint.FractionDigits -> decimalCondition(ref) {
-                CodeBlock.of("%N.scale() <= %L", prop.kotlinName, constraint.value)
+                CodeBlock.of("%L.scale() <= %L", subject, constraint.value)
             }
-            is Constraint.MinItems -> listCondition(prop, ref, ">=", constraint.value)
-            is Constraint.MaxItems -> listCondition(prop, ref, "<=", constraint.value)
+            is Constraint.MinItems -> listCondition(subject, ref, ">=", constraint.value)
+            is Constraint.MaxItems -> listCondition(subject, ref, "<=", constraint.value)
         }
 
     private fun lengthCondition(
-        prop: PropertyDefinition,
+        subject: CodeBlock,
         ref: TypeRef,
         operator: String,
         value: Int,
@@ -312,8 +399,8 @@ class KotlinCodegen(private val options: Options = Options()) {
         is TypeRef.Primitive ->
             when (ref.type) {
                 PrimitiveType.STRING, PrimitiveType.URI ->
-                    CodeBlock.of("%N.length $operator %L", prop.kotlinName, value)
-                PrimitiveType.BYTES -> CodeBlock.of("%N.size $operator %L", prop.kotlinName, value)
+                    CodeBlock.of("%L.length $operator %L", subject, value)
+                PrimitiveType.BYTES -> CodeBlock.of("%L.size $operator %L", subject, value)
                 else -> null
             }
         else -> null
@@ -323,7 +410,7 @@ class KotlinCodegen(private val options: Options = Options()) {
         if (ref is TypeRef.Primitive && ref.type in setOf(PrimitiveType.STRING, PrimitiveType.URI)) build() else null
 
     private fun numericCondition(
-        prop: PropertyDefinition,
+        subject: CodeBlock,
         ref: TypeRef,
         operator: String,
         value: String,
@@ -331,8 +418,8 @@ class KotlinCodegen(private val options: Options = Options()) {
         is TypeRef.Primitive ->
             when (ref.type) {
                 PrimitiveType.INT, PrimitiveType.LONG, PrimitiveType.FLOAT, PrimitiveType.DOUBLE ->
-                    CodeBlock.of("%N $operator %L", prop.kotlinName, value)
-                PrimitiveType.DECIMAL -> CodeBlock.of("%N $operator %T(%S)", prop.kotlinName, BIG_DECIMAL, value)
+                    CodeBlock.of("%L $operator %L", subject, value)
+                PrimitiveType.DECIMAL -> CodeBlock.of("%L $operator %T(%S)", subject, BIG_DECIMAL, value)
                 else -> null
             }
         else -> null
@@ -341,8 +428,8 @@ class KotlinCodegen(private val options: Options = Options()) {
     private fun decimalCondition(ref: TypeRef, build: () -> CodeBlock): CodeBlock? =
         if (ref is TypeRef.Primitive && ref.type == PrimitiveType.DECIMAL) build() else null
 
-    private fun listCondition(prop: PropertyDefinition, ref: TypeRef, operator: String, value: Int): CodeBlock? =
-        if (ref is TypeRef.ListOf) CodeBlock.of("%N.size $operator %L", prop.kotlinName, value) else null
+    private fun listCondition(subject: CodeBlock, ref: TypeRef, operator: String, value: Int): CodeBlock? =
+        if (ref is TypeRef.ListOf) CodeBlock.of("%L.size $operator %L", subject, value) else null
 
     private fun constraintMessage(prop: PropertyDefinition, constraint: Constraint): String =
         "schema2class: property '${prop.schemaName}' violates ${constraint.description()}"
@@ -354,6 +441,8 @@ class KotlinCodegen(private val options: Options = Options()) {
         is Constraint.Pattern -> "pattern $regex"
         is Constraint.MinValue -> "minimum $value"
         is Constraint.MaxValue -> "maximum $value"
+        is Constraint.MinValueExclusive -> "exclusiveMinimum $value"
+        is Constraint.MaxValueExclusive -> "exclusiveMaximum $value"
         is Constraint.TotalDigits -> "totalDigits $value"
         is Constraint.FractionDigits -> "fractionDigits $value"
         is Constraint.MinItems -> "minItems $value"
@@ -516,11 +605,39 @@ class KotlinCodegen(private val options: Options = Options()) {
             )
         addTypeAnnotations(builder, type.schemaName, type.kotlinName, namespace)
         type.documentation?.let { builder.addKdoc("%L", it.toKdocText()) }
+        addValueClassConstraintChecks(builder, type)
         if (kotlinxMode) {
             type.aliasedType.contextualPrimitiveTypes()
                 .forEach { builder.addType(stringSerializerType(it)) }
         }
         return builder.build()
+    }
+
+    private fun addValueClassConstraintChecks(typeBuilder: TypeSpec.Builder, type: TypeDefinition.AliasType) {
+        if (!options.enforceConstraints || type.constraints.isEmpty()) return
+
+        val prop = PropertyDefinition(
+            schemaName = type.schemaName,
+            kotlinName = "value",
+            type = type.aliasedType,
+            nullable = false,
+            defaultValue = null,
+            documentation = null,
+        )
+        val block = CodeBlock.builder()
+        var hasChecks = false
+        for (constraint in type.constraints) {
+            val condition = rawConstraintCondition(
+                CodeBlock.of("%N", "value"),
+                constraint,
+                type.aliasedType,
+            ) ?: continue
+            block.addStatement("require(%L) { %S }", condition, constraintMessage(prop, constraint))
+            hasChecks = true
+        }
+        if (hasChecks) {
+            typeBuilder.addInitializerBlock(block.build())
+        }
     }
 
     // ── Annotation helpers ────────────────────────────────────────────────────

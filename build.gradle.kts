@@ -1,4 +1,6 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.plugins.BasePluginExtension
+import org.gradle.jvm.tasks.Jar
 import org.gradle.plugins.signing.Sign
 import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
 import org.gradle.testing.jacoco.tasks.JacocoReport
@@ -25,6 +27,8 @@ val publishableProjects = setOf(
     "cli",
     "gradle-plugin",
 )
+
+fun publishedArtifactId(projectName: String): String = "schema2class-$projectName"
 
 repositories {
     mavenCentral()
@@ -108,10 +112,20 @@ subprojects {
     if (name in publishableProjects) {
         apply(plugin = "com.vanniktech.maven.publish")
 
+        extensions.configure<BasePluginExtension> {
+            archivesName.set(publishedArtifactId(project.name))
+        }
+
+        tasks.withType<Jar>().configureEach {
+            metaInf {
+                from(rootProject.file("LICENSE"))
+            }
+        }
+
         extensions.configure<MavenPublishBaseExtension> {
             publishToMavenCentral()
             signAllPublications()
-            coordinates(releaseGroup, project.name, releaseVersion)
+            coordinates(releaseGroup, publishedArtifactId(project.name), releaseVersion)
             pom {
                 name.set("schema2class ${project.name}")
                 description.set("Kotlin-native XSD and JSON Schema code generation (${project.name})")
