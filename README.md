@@ -76,6 +76,8 @@ schema2class generate \
 - Configuration reference: [docs/configuration.md](docs/configuration.md)
 - Compatibility matrix: [docs/compatibility.md](docs/compatibility.md)
 - Release process: [docs/release.md](docs/release.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security: [SECURITY.md](SECURITY.md)
 - Product plan: [PRD.md](PRD.md)
 
 ## Repository Layout
@@ -93,10 +95,10 @@ docs/                 MkDocs documentation
 
 ## Development
 
-Use JDK 21. In this local repo, Java is provided through SDKMAN:
+Use JDK 21 and the Gradle wrapper:
 
 ```bash
-source "$HOME/.sdkman/bin/sdkman-init.sh" && ./gradlew test detekt jacocoRootReport
+./gradlew test detekt jacocoRootReport
 ```
 
 Docs:
@@ -115,6 +117,9 @@ bd show <id>
 bd update <id> --claim
 bd close <id>
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor expectations and
+[SUPPORT.md](SUPPORT.md) for issue-reporting guidance.
 
 ## License
 

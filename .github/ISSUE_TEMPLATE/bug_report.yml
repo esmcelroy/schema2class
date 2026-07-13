@@ -1,0 +1,52 @@
+name: Bug report
+description: Report incorrect parsing, code generation, CLI, or Gradle plugin behavior.
+title: "Bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - XSD parser
+        - JSON Schema parser
+        - Kotlin codegen
+        - CLI
+        - Gradle plugin
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Include the smallest schema, command, or Gradle config that reproduces the issue.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Actual output or error
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: schema2class version
+      placeholder: "0.1.0, main, or commit SHA"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include JDK, Gradle, Kotlin, OS, and annotation mode when relevant.

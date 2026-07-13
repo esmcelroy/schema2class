@@ -1,0 +1,25 @@
+name: Documentation issue
+description: Report missing, confusing, or incorrect documentation.
+title: "Docs: "
+labels:
+  - documentation
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or section
+      placeholder: "docs/getting-started.md"
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Issue
+      description: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change
+      description: Optional wording, examples, or links that would help.

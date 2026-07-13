@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/esmcelroy/schema2class/security/advisories/new
+    about: Report vulnerabilities privately instead of opening a public issue.
+  - name: Support guidance
+    url: https://github.com/esmcelroy/schema2class/blob/main/SUPPORT.md
+    about: Choose the right channel for questions, bugs, and feature requests.

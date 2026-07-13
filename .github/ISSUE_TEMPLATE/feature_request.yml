@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest schema support, codegen behavior, CLI, Gradle, or docs improvements.
+title: "Feature: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what blocks you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the generated Kotlin, parser behavior, or configuration you want.
+    validations:
+      required: true
+  - type: textarea
+    id: schema
+    attributes:
+      label: Schema example
+      description: Include a minimal XSD or JSON Schema fragment if applicable.
+      render: text
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Compatibility notes
+      description: Mention annotation modes, wire compatibility, or migration concerns.

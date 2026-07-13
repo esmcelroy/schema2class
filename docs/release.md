@@ -43,7 +43,7 @@ GitHub Actions must have these repository secrets:
 | `GRADLE_PUBLISH_KEY` | Gradle Plugin Portal API key. |
 | `GRADLE_PUBLISH_SECRET` | Gradle Plugin Portal API secret. |
 
-Export the signing key from a local GPG keychain:
+Export the signing key from a GPG keychain:
 
 ```bash
 gpg --list-secret-keys --keyid-format LONG
@@ -65,7 +65,6 @@ gpg --keyserver keyserver.ubuntu.com --send-keys <key-id>
 Run locally:
 
 ```bash
-source "$HOME/.sdkman/bin/sdkman-init.sh"
 ./gradlew test detekt jacocoRootReport
 ./gradlew publishToMavenLocal :cli:distZip :cli:distTar
 ```
