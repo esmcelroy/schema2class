@@ -52,3 +52,5 @@
 # - linear.api-key
 # - github.org
 # - github.repo
+
+sync.remote: "git@github.com:esmcelroy/schema2class.git"

@@ -83,6 +83,7 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
+   bd dolt pull
    bd dolt push
    git push
    git status  # MUST show "up to date with origin"
@@ -92,7 +93,7 @@ bd close <id>         # Complete work
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
+- Work is NOT complete until both `bd dolt push` and `git push` succeed
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
